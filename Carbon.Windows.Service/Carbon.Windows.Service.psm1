@@ -1,3 +1,4 @@
+
 # Copyright WebMD Health Services
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +19,24 @@ Set-StrictMode -Version 'Latest'
 # Functions should use $script:moduleDirPath as the relative root from which to find things. A published module has its
 # function appended to this file, while a module in development has its functions in the Functions directory.
 $script:moduleDirPath = $PSScriptRoot
+
+# Three states:
+# * `$null`: never checked if NUMA is enabled by calling `QueryServiceConfig2` for preferred node configuration.
+# * `$true`: NUMA is enabled because calling `QueryServiceConfig2` for preferred node configuration returned a value.
+# * `$false`: NUMA is not enabled because calling `QueryServiceConfig2` for preferred node configuration resulted in a
+#   `The parameter is incorrect.` (87) error.
+$script:numaEnabled = $null
+
+Import-Module -Name (Join-Path -Path $script:moduleDirPath -ChildPath 'M\PureInvoke\PureInvoke.psm1' -Resolve) `
+              -Function @(
+                    'Invoke-AdvApiOpenSCManager',
+                    'Invoke-AdvApiOpenService',
+                    'Invoke-AdvApiCloseServiceHandle',
+                    'Invoke-AdvApiQueryServiceConfig',
+                    'Invoke-AdvApiQueryServiceConfig2',
+                    'Write-Win32Error'
+                ) `
+              -Verbose:$false
 
 # Store each of your module's functions in its own file in the Functions directory. On the build server, your module's
 # functions will be appended to this file, so only dot-source files that exist on the file system. This allows

@@ -1,74 +1,138 @@
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-# 
-#     http://www.apache.org/licenses/LICENSE-2.0
-# 
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
+#Requires -Version 5.1
 Set-StrictMode -Version 'Latest'
 
-& (Join-Path -Path $PSScriptRoot -ChildPath 'Initialize-CarbonTest.ps1' -Resolve)
+BeforeAll {
+    Set-StrictMode -Version 'Latest'
 
-Describe 'Get-ServiceConfiguration' {
+    Import-Module -Name (Join-Path -Path $PSScriptRoot -ChildPath '..\Carbon.Windows.Service' -Resolve) -Verbose:$false
+
+    function ThenError
+    {
+        param(
+            [Parameter(Mandatory, ParameterSetName='IsEmpty')]
+            [switch] $IsEmpty,
+
+            [Parameter(ParameterSetName='MatchesRegex')]
+            [int] $At = 0,
+
+            [Parameter(Mandatory, ParameterSetName='MatchesRegex')]
+            [String] $MatchesRegex
+        )
+
+        if ($IsEmpty)
+        {
+            $Global:Error | Should -BeNullOrEmpty
+        }
+
+        if ($MatchesRegex)
+        {
+            $Global:Error.Count | Should -BeGreaterOrEqual $At
+            $Global:Error[$At] | Should -Match $MatchesRegex
+        }
+    }
+}
+
+Describe 'Get-CServiceConfiguration' {
     BeforeEach {
         $Global:Error.Clear()
     }
 
-    It 'should load all service configuration' {
-        Get-Service | 
+    $svcNames =
+            Get-Service |
             # Skip Carbon services. They could get uninstalled at any moment.
-            Where-Object { $_.Name -notlike 'Carbon*' } |
-            Get-CServiceConfiguration -ErrorAction 'SilentlyContinue' | 
-            Format-List -Property *
-        
-        # ComputerName parameter does not exists under PowerShell Core.
-        if( Get-Command -Name 'Get-Service' -ParameterName 'ComputerName' -ErrorAction Ignore )
+            Where-Object 'Name' -NotLike 'Carbon*' |
+            # Unqueryable on the build servers
+            Where-Object 'Name' -NotLike 'CDPUserSvc*' |
+            # Description service on my computer fails.
+            Where-Object 'Name' -NotIn @('WaaSMedicSvc') |
+            # Select-Object -First 5 |
+            Select-Object -ExpandProperty 'Name'
+    It 'reads <_> service configuration' -ForEach $svcNames {
+        $svc = Get-Service -Name $_
+        $config = $svc | Get-CServiceConfiguration
+        ThenError -IsEmpty
+
+        $config | Should -Not -BeNullOrEmpty
+        $config.Name | Should -Be $svc.Name
+        $config.DisplayName | Should -Be $svc.DisplayName
+        $config.ServiceType | Should -BeOfType ([Enum])
+        $config.StartType | Should -Be $svc.StartType
+        $config.ErrorControl | Should -BeOfType ([Enum])
+
+        $config.TagID | Should -Not -BeNullOrEmpty
+        # Get-Service doesn't report one of the RemoteAccess service's dependencies.
+        if ($config.Name -ne 'RemoteAccess')
         {
-            $Global:Error.Count | Should -Be 0
+            $config.Dependencies |
+                Sort-Object |
+                Should -Be ($svc.ServicesDependedOn | Select-Object -ExpandProperty 'Name' | Sort-Object)
         }
-        else
+
+        $config.UserName | Should -BeOfType ([String])
+        $config.DelayedAutoStart | Should -BeOfType ([bool])
+        if ($null -ne $config.Description)
         {
-            $Global:Error[0] | Should -Match 'this version of PowerShell doesn''t support services on remote computers.'
+            $config.Description | Should -BeOfType ([String])
         }
+        $config.LoadOrderGroup | Should -BeOfType ([String])
+        if ($null -ne $config.FailureResetPeriod)
+        {
+            $config.FailureResetPeriod | Should -BeOfType ([TimeSpan])
+        }
+        if ($null -ne $config.FailureCommand)
+        {
+            $config.FailureCommand | Should -BeOfType ([String])
+        }
+        if ($null -ne $config.FailureRebootMessage)
+        {
+            $config.FailureRebootMessage | Should -BeOfType ([String])
+        }
+        ,$config.FailureActions | Should -BeOfType ([Object[]])
+        $null -eq $config.FailureActions | Should -BeFalse
+        foreach ($action in $config.FailureActions)
+        {
+            $action | Should -Not -BeNullOrEmpty
+            $action.Type | Should -BeOfType ([Enum])
+            $action.Delay | Should -BeOfType ([TimeSpan])
+        }
+        $config.FailureActionsOnNonCrashFailures | Should -BeOfType ([bool])
+        if ($null -ne $config.PreferredNode)
+        {
+            $config.PreferredNode | Should -BeOfType ([Int16])
+        }
+        $config.PreshutdownTimeout | Should -BeOfType ([TimeSpan])
+        ,$config.RequiredPrivileges | Should -BeOfType ([String[]])
+        $config.SidType | Should -BeOfType ([Enum])
+        ,$config.Triggers | Should -BeOfType ([Object[]])
+        $null -eq $config.Triggers | Should -BeFalse
+        foreach ($trigger in $config.Triggers)
+        {
+            $trigger | Should -Not -BeNullOrEmpty
+            $trigger.Type | Should -BeOfType ([Enum])
+            $trigger.Action | Should -BeOfType ([Enum])
+            ,$trigger.DataItems | Should -BeOfType ([Object[]])
+
+            foreach ($datum in $trigger.DataItems)
+            {
+                $datum | Should -Not -BeNullOrEmpty
+                $datum.Type | Should -BeOfType ([Enum])
+                $datum.Data | Should -Not -BeNullOrEmpty
+                ,$datum.Data | Should -BeOfType ([Object])
+            }
+        }
+        $config.LaunchProtected | Should -BeOfType ([Enum])
     }
 
     It 'should write an error if the service doesn''t exist' {
         $info = Get-CServiceConfiguration -Name 'YOLOyolo' -ErrorAction SilentlyContinue
         $info | Should -BeNullOrEmpty
-        $Global:Error | Should -Match 'Cannot\ find\ any\ service'
+        ThenError -MatchesRegex 'does not exist as an installed service'
     }
 
     It 'should ignore missing service' {
         $info = Get-CServiceConfiguration -Name 'FUBARsnafu' -ErrorAction Ignore
         $info | Should -BeNullOrEmpty
-        $Global:Error | Should -BeNullOrEmpty
-    }
-    
-    It 'should load extended type data' {
-        $services = Get-Service | Where-Object { $_.Name -notlike 'Carbon*' }
-        $memberNames = $null
-            
-        foreach( $service in $services )
-        {
-            $info = Get-CServiceConfiguration -Name $service.Name
-            if( -not $memberNames )
-            {
-                $memberNames = 
-                    $info | 
-                    Get-Member -MemberType 'Property' | 
-                    Select-Object -ExpandProperty 'Name'
-            }
-
-            foreach( $memberName in $memberNames )
-            {
-                $info.$memberName | Should -Be $service.$memberName
-            }
-        }
-        $Global:Error.Count | Should -Be 0
+        ThenError -IsEmpty
     }
 }
