@@ -29,6 +29,7 @@ Import-Module -Name (Join-Path -Path $script:moduleDirPath -ChildPath 'M\PureInv
                     'Invoke-AdvApiCloseServiceHandle',
                     'Invoke-AdvApiQueryServiceConfig',
                     'Invoke-AdvApiQueryServiceConfig2',
+                    'Invoke-AdvApiQueryServiceObjectSecurity',
                     'Write-Win32Error'
                 ) `
               -Verbose:$false
