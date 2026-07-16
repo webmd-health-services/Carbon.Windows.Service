@@ -1,0 +1,10 @@
+{
+	"PSModules": [
+		{
+			"Name": "PureInvoke",
+			"Version": "2.*",
+			"AllowPrerelease": true
+		}
+	],
+	"PSModulesDirectoryName": "M"
+}
