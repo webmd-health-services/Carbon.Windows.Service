@@ -61,6 +61,7 @@ If switching from Carbon,
     * [`SidType`](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_sid_info)
     * [`Triggers`](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_trigger)
     * [`LaunchProtected`](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_launch_protected_info)
+* `Get-CServiceSecurityDescriptor` sets `Owner` and `Group` on the returned security descriptor object.
 
 ### Changed
 
