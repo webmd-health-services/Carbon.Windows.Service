@@ -3,6 +3,10 @@
 		{
 			"Name": "PureInvoke",
 			"Version": "2.*"
+		},
+		{
+			"Name": "Carbon.Accounts",
+			"Version": "2.*"
 		}
 	],
 	"PSModulesDirectoryName": "M"
