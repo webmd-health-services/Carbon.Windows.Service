@@ -40,6 +40,8 @@ If switching from Carbon,
       `FailureActions`. `Get-CServiceConfiguration` was improperly returning these as service-level configuration.
     * check usages of the `ErrorControl` enum property. Its type has changed, but it still has the same underlying
       names and values.
+* Replace usages of `Get-ServicePermissions` alias with `Get-CServicePermission` function.
+* Rename usages of the `Get-CServicePermission` function's `Identity` parameter to `PrincipalName`.
 
 ### Added
 
@@ -72,6 +74,12 @@ The following changed from Carbon:
   has the same underlying names and values.
 * `Get-CServiceConfiguration` now attempts to get service configuration on remote computer when running in pwsh instead
   of refusing to even try.
+* Renamed the `Get-CServicePermission` function's `Identity` parameter to `PrincipalName`.
+
+### Fixed
+
+* `Get-CServicePermission` writes an error if a service's permissions contain callback ACEs and doesn't return access
+  rules for callback ACEs.
 
 ### Removed
 
@@ -110,3 +118,4 @@ The following changed from Carbon:
     * `RebootDelayMinutes`
     * `RestartDelay`
     * `RestartDelayMinutes`
+* `Get-ServicePermissions` alias to `Get-CServicePermission` function.

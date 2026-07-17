@@ -4,6 +4,10 @@
 			"Name": "PureInvoke",
 			"Version": "2.*",
 			"AllowPrerelease": true
+		},
+		{
+			"Name": "Carbon.Accounts",
+			"Version": "2.*"
 		}
 	],
 	"PSModulesDirectoryName": "M"

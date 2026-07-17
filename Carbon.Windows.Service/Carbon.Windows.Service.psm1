@@ -1,4 +1,7 @@
 
+using namespace System.Security.AccessControl
+using namespace System.Security.Principal
+
 # Copyright WebMD Health Services
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +25,9 @@ $script:moduleDirPath = $PSScriptRoot
 
 $script:numaEnabled = $null
 
-Import-Module -Name (Join-Path -Path $script:moduleDirPath -ChildPath 'M\PureInvoke\PureInvoke.psm1' -Resolve) `
+$modulesDirPath = Join-Path -Path $PSScriptRoot -ChildPath 'M' -Resolve
+
+Import-Module -Name (Join-Path -Path $modulesDirPath -ChildPath 'PureInvoke\PureInvoke.psm1' -Resolve) `
               -Function @(
                     'Invoke-AdvApiOpenSCManager',
                     'Invoke-AdvApiOpenService',
@@ -33,6 +38,76 @@ Import-Module -Name (Join-Path -Path $script:moduleDirPath -ChildPath 'M\PureInv
                     'Write-Win32Error'
                 ) `
               -Verbose:$false
+Import-Module -Name (Join-Path -Path $modulesDirPath -ChildPath 'Carbon.Accounts\Carbon.Accounts.psm1' -Resolve) `
+              -Function @('Resolve-CPrincipal') `
+              -Verbose:$false
+
+[Flags()]
+enum Carbon_Windows_Service_ServiceAccessRights
+{
+    QueryConfig         = 0x00001
+    ChangeConfig        = 0x00002
+    QueryStatus         = 0x00004
+    EnumerateDependents = 0x00008
+    Start               = 0x00010
+    Stop                = 0x00020
+    PauseContinue       = 0x00040
+    Interrogate         = 0x00080
+    UserDefinedControl  = 0x00100
+    Delete              = 0x10000
+    ReadControl         = 0x20000
+    WriteDac            = 0x40000
+    WriteOwner          = 0x80000
+    FullControl         = 0xf01ff
+}
+
+# Classes are cached by PowerShell. To support different versions of a class loaded side-by-side in the same PowerShell
+# session, need to have a version number in the name.
+class Carbon_Windows_Service_ServiceAccessRule_v1 : AccessRule
+{
+    Carbon_Windows_Service_ServiceAccessRule_v1([IdentityReference] $identity,
+                                                [Carbon_Windows_Service_ServiceAccessRights] $rights,
+                                                [AccessControlType] $type) :
+        base($identity, [int]$rights, $false, [InheritanceFlags]::None, [PropagationFlags]::None, $type)
+    {
+        $this.ServiceAccessRights = $rights
+    }
+
+    [Carbon_Windows_Service_ServiceAccessRights] $ServiceAccessRights
+
+    [bool] Equals([Object] $obj)
+    {
+        if ($null -eq $obj)
+        {
+            return $false
+        }
+
+        if ($obj -isnot [Carbon_Windows_Service_ServiceAccessRule_v1])
+        {
+            return $false
+        }
+
+        return $obj.ServiceAccessRights -eq $this.ServiceAccessRights -and `
+               $obj.IdentityReference -eq $this.IdentityReference -and `
+               $obj.AccessControlType -eq $this.AccessControlType
+    }
+
+    # https://github.com/microsoft/referencesource/blob/main/mscorlib/system/tuple.cs#L52-L55
+    [int] CombineHashCodes([int] $h1, [int] $h2)
+    {
+        return (($h1 -shl 5) + $h1) -bxor $h2
+    }
+
+    [int] GetHashCode()
+    {
+        $h1 = $this.ServiceAccessRights.GetHashCode()
+        $h2 = $this.IdentityReference.GetHashCode()
+        $h3 = $this.AccessControlType.GetHashCode()
+
+        $h = $this.CombineHashCodes($h1, $h2)
+        return $this.CombineHashCodes($h, $h3)
+    }
+}
 
 # Store each of your module's functions in its own file in the Functions directory. On the build server, your module's
 # functions will be appended to this file, so only dot-source files that exist on the file system. This allows

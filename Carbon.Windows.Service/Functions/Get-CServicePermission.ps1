@@ -6,13 +6,18 @@ function Get-CServicePermission
     Gets the permissions for a service.
 
     .DESCRIPTION
-    Uses the Win32 advapi32 API to query the permissions for a service.  Returns `Carbon.ServiceAccessRule` objects for each.  The two relavant properties on this object are
+    The `Get-CServicePermission` returns the permissions for a service. Pass the service's name to the `Name` parameter.
+    It uses the Windows API's `QueryServiceObjectSecurity` function to get the discretionary ACL for the service. It
+    converts each of the ACL's access control entries (ACE) into `[Security.AccessControl.AccessRule]` objects and
+    returns them. Any system audit or alarm ACEs are skipped. Return objects will have a `ServiceAccessRights` property
+    that is a flags enumeration of the permissions.
 
-     * IdentityReference - The identity of the permission.
-     * ServiceAccessRights - The permissions the user has.
+    To get the permissions for a specific principal, pass its name to the `PrincipalName` parameter.
 
-    .OUTPUTS
-    Carbon.Security.ServiceAccessRule.
+    The type of the objects returned and the type of the `ServiceAccessRights` enum are an implementation detail and
+    should be ignored.
+
+    To access the service ACEs, use `Get-CServiceAcl`.
 
     .LINK
     Grant-ServicePermissions
@@ -20,39 +25,42 @@ function Get-CServicePermission
     .LINK
     Revoke-ServicePermissions
 
+    .LINK
+    Get-CServiceAcl
+
+    .LINK
+    Set-CServiceACl
+
     .EXAMPLE
     Get-CServicePermission -Name 'Hyperdrive'
 
     Gets the access rules for the `Hyperdrive` service.
 
     .EXAMPLE
-    Get-CServicePermission -Name 'Hyperdrive' -Identity FALCON\HSolo
+    Get-CServicePermission -Name 'Hyperdrive' -PrincipalName 'FALCON\HSolo'
 
     Gets just Han's permissions to control the `Hyperdrive` service.
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory=$true)]
-        [string]
         # The name of the service whose permissions to return.
-        $Name,
+        [Parameter(Mandatory)]
+        [String] $Name,
 
-        [string]
-        # The specific identity whose permissions to get.
-        $Identity
+        # The specific principal whose permissions to get. Wildcards *not* supported.
+        [String] $PrincipalName
     )
 
     Set-StrictMode -Version 'Latest'
-
     Use-CallerPreference -Cmdlet $PSCmdlet -Session $ExecutionContext.SessionState
 
     $dacl = Get-CServiceAcl -Name $Name
 
-    $account = $null
-    if( $Identity )
+    $principal = $null
+    if ($PrincipalName)
     {
-        $account = Resolve-CIdentity -Name $Identity -NoWarn
-        if( -not $account )
+        $principal = Resolve-CPrincipal -Name $PrincipalName
+        if( -not $principal )
         {
             return
         }
@@ -62,42 +70,48 @@ function Get-CServicePermission
         ForEach-Object {
             $ace = $_
 
-            $aceSid = $ace.SecurityIdentifier;
-            if( $aceSid.IsValidTargetType([Security.Principal.NTAccount]) )
+            $identity = $ace.SecurityIdentifier;
+            if ($identity.IsValidTargetType([NTAccount]))
             {
+                $numErrorsBefore = $Global:Error.Count
                 try
                 {
-                    $aceSid = $aceSid.Translate([Security.Principal.NTAccount])
+                    $identity = $identity.Translate([NTAccount])
                 }
-                catch [Security.Principal.IdentityNotMappedException]
+                catch [IdentityNotMappedException]
                 {
                     # user doesn't exist anymore.  So sad.
+                    $numErrorsNow = $Global:Error.Count
+                    for ($idx = 0 ; $idx -lt ($numErrorsNow - $numErrorsBefore) ; $idx++)
+                    {
+                        $Global:Error.RemoveAt(0)
+                    }
                 }
             }
 
-            if ($ace.AceType -eq [Security.AccessControl.AceType]::AccessAllowed)
+            if ($ace.AceQualifier -eq [AceQualifier]::AccessAllowed)
             {
-                $ruleType = [Security.AccessControl.AccessControlType]::Allow
+                $ruleType = [AccessControlType]::Allow
             }
-            elseif ($ace.AceType -eq [Security.AccessControl.AceType]::AccessDenied)
+            elseif ($ace.AceQualifier -eq [AceQualifier]::AccessDenied)
             {
-                $ruleType = [Security.AccessControl.AccessControlType]::Deny
+                $ruleType = [AccessControlType]::Deny
             }
             else
             {
-                Write-Error ("Unsupported aceType {0}." -f $ace.AceType)
+                $msg = "Get-CServicePermission: Service ${Name}: skipping unsupported $($ace.AceQualifier) ACE for " +
+                       "princial ""${identity}""."
+                Write-Verbose $msg
                 return
             }
-            New-Object Carbon.Security.ServiceAccessRule $aceSid,$ace.AccessMask,$ruleType
+
+            [Carbon_Windows_Service_ServiceAccessRule_v1]::New($identity, $ace.AccessMask, $ruleType)
         } |
         Where-Object {
-            if( $account )
+            if( $principal )
             {
-                return ($_.IdentityReference.Value -eq $account.FullName)
+                return ($_.IdentityReference.Value -eq $principal.FullName)
             }
             return $_
         }
 }
-
-Set-Alias -Name 'Get-ServicePermissions' -Value 'Get-CServicePermission'
-
