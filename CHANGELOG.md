@@ -42,6 +42,16 @@ If switching from Carbon,
       names and values.
 * Replace usages of `Get-ServicePermissions` alias with `Get-CServicePermission` function.
 * Rename usages of the `Get-CServicePermission` function's `Identity` parameter to `PrincipalName`.
+* `Install-CService`:
+  * Rename `TakeNoAction` values passed to `OnFirstFailure`, `OnSecondFailure`, and `OnThirdFailure` to `None` or omit.
+  * Rename usages of `ResetFailureCount` to `FailureResetPeriod`.
+  * Change values passed to `FailureResetPeriod` (nee `ResetFailureCount`), `RestartDelay`, `RebootDelay`, and
+    `RunCommandDelay` parameters from `[int]` to `[TimeSpan]`. `FailureResetPeriod` is seconds, so use
+    `[TimeSpan]::New(0, 0, OLD_VALUE)`. The other parameters take milliseconds, so use `[TimeSpan]::New(0, 0, 0, 0,
+    OLD_VALUE)`. Or use `HH:mm:ss.fff` formatted strings.
+  * Rename `Command` parameter to `FailureCommand`.
+  * Removed `Password` parameter. Use `Credential` parameter instead.
+  * Rename usages of `Dependencies` to `Dependency` parameter. The `Dependencies` alias removed.
 
 ### Added
 
@@ -75,11 +85,24 @@ The following changed from Carbon:
 * `Get-CServiceConfiguration` now attempts to get service configuration on remote computer when running in pwsh instead
   of refusing to even try.
 * Renamed the `Get-CServicePermission` function's `Identity` parameter to `PrincipalName`.
+* `Install-CService`:
+  * renamed `TakeNoAction` failure action enum to `None`.
+  * Renamed `ResetFailureCount` parameter to `FailureResetPeriod`. Update usages.
+  * Parameters `FailureResetPeriod` (nee `ResetFailureCount`), `RestartDelay`, `RebootDelay`, and `RunCommandDelay`
+    changed from `[int]` to `[TimeSpan]`. `FailureResetPeriod` is in seconds, so use `[TimeSpan]::New(0, 0, OLD_VALUE)`.
+    The other parameters take milliseconds, so use `[TimeSpan]::New(0, 0, 0, 0, OLD_VALUE)`. Or use `HH:mm:ss.fff`
+    formatted strings.
+  * `Command` parameter renamed to `FailureCommand`.
+  * Removed `Password` parameter. Use `Credential` parameter instead.
+  * `Dependencies` alias on `Dependency` parameter. Updates usages.
 
 ### Fixed
 
 * `Get-CServicePermission` writes an error if a service's permissions contain callback ACEs and doesn't return access
   rules for callback ACEs.
+* `Install-CService` always re-installs a service if not setting a failure command.
+* `Install-CService` configures failure actions even if they haven't changed but other service properties have.
+* `Install-CService` configures description even if it hasn't changed but other service properties have.
 
 ### Removed
 

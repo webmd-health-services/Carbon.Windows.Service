@@ -10,32 +10,18 @@ function Install-CService
     is stopped, its configuration is updated to match the parameters passed in, and then re-started. Settings whose
     parameters are omitted are reset to their default values.
 
-    Beginning in Carbon 2.0, use the `PassThru` switch to return a `ServiceController` object for the new/updated
-    service.
-
     By default, the service is installed to run as `NetworkService`. Use the `Credential` parameter to run as a
-    different account (if you don't have a `Credential` parameter, upgrade to Carbon 2.0 or use the `UserName` and
-    `Password` parameters). This user will be granted the logon as a service right. To run as a system account other
-    than `NetworkService`, provide just the account's name as the `UserName` parameter.
+    different account. This user will be granted the logon as a service right. To run as a system account other than
+    `NetworkService`, provide just the account's name as the `UserName` parameter. [Managed service accounts and virtual
+    accounts](http://technet.microsoft.com/en-us/library/dd548356.aspx) should be supported (we don't know how to test,
+    so can't be sure). Pass their name to the `UserName` parameter.
 
     The minimum required information to install a service is its name and path.
 
-    [Managed service accounts and virtual accounts](http://technet.microsoft.com/en-us/library/dd548356.aspx) should be
-    supported (we don't know how to test, so can't be sure).  Simply omit the `-Password` parameter when providing a
-    custom account name with the `-Username` parameter.
-
-    `Manual` services are not started. `Automatic` services are started after installation. If an existing manual
-    service is running when configuration begins, it is re-started after re-configured. If a service is stopped when
-    configuration begins, it remains stopped when configuration ends. To start the service if it is stopped, use the
-    `-EnsureRunning` switch (which was added in version 2.5.0).
-
-    The ability to provide service arguments/parameters via the `ArgumentList` parameter was added in Carbon 2.0.
-
-    .LINK
-    Carbon_Service
-
-    .LINK
-    New-CCredential
+    Manual services are not started. Automatic services are started after installation. If an existing manual service is
+    running when configuration begins, it is re-started after re-configured. If a service is stopped when configuration
+    begins, it remains stopped when configuration ends. To start the service if it is stopped, use the `-EnsureRunning`
+    switch.
 
     .LINK
     Uninstall-CService
@@ -54,7 +40,7 @@ function Install-CService
     Install-CService -Name DeathStar -Path C:\ALongTimeAgo\InAGalaxyFarFarAway\DeathStar.exe -StartupType Manual
 
     Install the Death Star service to startup manually.  You certainly don't want the thing roaming the galaxy,
-    destroying thing willy-nilly, do you?
+    destroying things willy-nilly, do you?
 
     .EXAMPLE
     Install-CService -Name DeathStar -Path C:\ALongTimeAgo\InAGalaxyFarFarAway\DeathStar.exe -StartupType Automatic -Delayed
@@ -63,23 +49,23 @@ function Install-CService
     `Automatic` and provide the `Delayed` switch. This behavior was added in Carbon 2.5.
 
     .EXAMPLE
-    Install-CService -Name DeathStar -Path C:\ALongTimeAgo\InAGalaxyFarFarAway\DeathStar.exe -Credential $tarkinCredentials
+    Install-CService -Name DeathStar -Path C:\ALongTimeAgo\InAGalaxyFarFarAway\DeathStar.exe -Credential $tarkin
 
-    Installs the Death Star service to run as Grand Moff Tarkin, who is given the log on as a service right.
+    Installs the Death Star service to run as Grand Moff Tarkin, who is also given the log on as a service right.
 
     .EXAMPLE
     Install-CService -Name DeathStar -Path C:\ALongTimeAgo\InAGalaxyFarFarAway\DeathStar.exe -Username SYSTEM
 
-    Demonstrates how to install a service to run as a system account other than `NetworkService`. Installs the
-    DeathStart service to run as the local `System` account.
+    Demonstrates how to install a service to run as a system account, gMSA, or virtual account other than
+    `NetworkService`. In this example, installs the DeathStar service to run as the local `System` account.
 
     .EXAMPLE
-    Install-CService -Name DeathStar -Path C:\ALongTimeAgo\InAGalaxyFarFarAway\DeathStar.exe -OnFirstFailure RunCommand -RunCommandDelay 5000 -Command 'engage_hyperdrive.exe "Corruscant"' -OnSecondFailure Restart -RestartDelay 30000 -OnThirdFailure Reboot -RebootDelay 120000 -ResetFailureCount (60*60*24)
+    Install-CService -Name DeathStar -Path C:\ALongTimeAgo\InAGalaxyFarFarAway\DeathStar.exe -OnFirstFailure RunCommand -RunCommandDelay '0:00:05' -Command 'engage_hyperdrive.exe "Corruscant"' -OnSecondFailure Restart -RestartDelay '00:00:30' -OnThirdFailure Reboot -RebootDelay '00:02:00' -FailureResetPeriod '1.00:00:00'
 
     Demonstrates how to control the service's failure actions. On the first failure, Windows will run the
-    `engage-hyperdrive.exe "Corruscant"` command after 5 seconds (`5,000` milliseconds). On the second failure, Windows
-    will restart the service after 30 seconds (`30,000` milliseconds). On the third failure, Windows will reboot after
-    two minutes (`120,000` milliseconds). The failure count gets reset once a day (`60*60*24` seconds).
+    `engage-hyperdrive.exe "Corruscant"` command after 5 seconds. On the second failure, Windows will restart the
+    service after 30 seconds. On the third failure, Windows will reboot after two minutes. The failure count gets reset
+    once a day.
 
     .EXAMPLE
     Install-CService -Name DeathStar -Path C:\ALongTimeAgo\InAGalaxyFarFarAway\DeathStar.exe -EnsureRunning
@@ -90,8 +76,6 @@ function Install-CService
     #>
     [CmdletBinding(SupportsShouldProcess, DefaultParameterSetName='NetworkServiceAccount')]
     [OutputType([ServiceProcess.ServiceController])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingUserNameAndPassWordParams', '')]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', '')]
     param(
         # The name of the service.
         [Parameter(Mandatory)]
@@ -107,46 +91,40 @@ function Install-CService
         # The startup type: automatic, manual, or disabled.  Default is automatic.
         #
         # To start the service as automatic delayed, use the `-Delayed` switch and set this parameter to `Automatic`.
-        # The ability to set a service's startup type to automatic delayed was added in Carbon 2.5.
-        [ServiceProcess.ServiceStartMode] $StartupType = [ServiceProcess.ServiceStartMode]::Automatic,
+        [ServiceStartMode] $StartupType = [ServiceStartMode]::Automatic,
 
         # When the startup type is automatic, further configure the service start type to be automatic delayed. This
         # parameter is ignored unless `StartupType` is `Automatic`.
-        #
-        # This switch was added in Carbon 2.5.
         [switch] $Delayed,
 
-        # What to do on the service's first failure.  Default is to take no action.
-        [Carbon.Service.FailureAction] $OnFirstFailure = [Carbon.Service.FailureAction]::TakeNoAction,
+        # What to do on the service's first failure. Default is to take no action.
+        [Carbon_Windows_Service_FailureAction] $OnFirstFailure = [Carbon_Windows_Service_FailureAction]::None,
 
         # What to do on the service's second failure. Default is to take no action.
-        [Carbon.Service.FailureAction] $OnSecondFailure = [Carbon.Service.FailureAction]::TakeNoAction,
+        [Carbon_Windows_Service_FailureAction] $OnSecondFailure = [Carbon_Windows_Service_FailureAction]::None,
 
-        # What to do on the service' third failure.  Default is to take no action.
-        [Carbon.Service.FailureAction] $OnThirdFailure = [Carbon.Service.FailureAction]::TakeNoAction,
+        # What to do on the service' third failure. Default is to take no action.
+        [Carbon_Windows_Service_FailureAction] $OnThirdFailure = [Carbon_Windows_Service_FailureAction]::None,
 
-        # How many seconds after which the failure count is reset to 0.
-        [int] $ResetFailureCount = 0,
+        # How often should the failure count get reset to 0? Default is to not set. Rounded to the nearest second.
+        [TimeSpan] $FailureResetPeriod = [TimeSpan]::Zero,
 
-        # How many milliseconds to wait before restarting the service.  Default is 60,0000, or 1 minute.
-        [int] $RestartDelay = 60000,
+        # How long to wait before restarting a service after a failure? Default is 1 minute.
+        [TimeSpan] $RestartDelay = [TimeSpan]::New(0, 1, 0),
 
-        # How many milliseconds to wait before handling the second failure.  Default is 60,000 or 1 minute.
-        [int] $RebootDelay = 60000,
+        # How long to wait before rebooting a server after a service failure? Default is 1 minute.
+        [TimeSpan] $RebootDelay = [TimeSpan]::New(0, 1, 0),
 
         # What other services does this service depend on?
-        [Alias('Dependencies')]
         [String[]] $Dependency,
 
         # The command to run when a service fails, including path to the command and arguments.
-        [String] $Command,
+        [String] $FailureCommand,
 
         # How many milliseconds to wait before running the failure command. Default is 0, or immediately.
-        [int] $RunCommandDelay = 0,
+        [TimeSpan] $RunCommandDelay = [TimeSpan]::Zero,
 
         # The service's description. If you don't supply a value, the service's existing description is preserved.
-        #
-        # The `Description` parameter was added in Carbon 2.0.
         [String] $Description,
 
         # The service's display name. If you don't supply a value, the display name will set to Name.
@@ -158,11 +136,6 @@ function Install-CService
         [string]
         # The user the service should run as. Default is `NetworkService`.
         $UserName,
-
-        [Parameter(ParameterSetName='CustomAccount', DontShow)]
-        [string]
-        # OBSOLETE. The `Password` parameter will be removed in a future major version of Carbon. Use the `Credential` parameter instead.
-        $Password,
 
         [Parameter(ParameterSetName='CustomAccountWithCredential',Mandatory)]
         [pscredential]
@@ -191,17 +164,17 @@ function Install-CService
     {
         if( $action -eq 'Reboot' )
         {
-            return "reboot/{0}" -f $RebootDelay
+            return "reboot/{0}" -f [int]$RebootDelay.TotalMilliseconds
         }
         elseif( $action -eq 'Restart' )
         {
-            return "restart/{0}" -f $RestartDelay
+            return "restart/{0}" -f [int]$RestartDelay.TotalMilliseconds
         }
         elseif( $action -eq 'RunCommand' )
         {
-            return 'run/{0}' -f $RunCommandDelay
+            return 'run/{0}' -f [int]$RunCommandDelay.TotalMilliseconds
         }
-        elseif( $action -eq 'TakeNoAction' )
+        elseif( $action -eq 'None' )
         {
             return '""/0'
         }
@@ -212,16 +185,114 @@ function Install-CService
         }
     }
 
+    function Select-FailureAction
+    {
+        param(
+            [Parameter(Mandatory, ValueFromPipeline)]
+            [Object] $Action,
+
+            [Parameter(Mandatory)]
+            [int] $AtIndex
+        )
+
+        begin
+        {
+            $idx = 0
+            $gotOne = $false
+        }
+
+        process
+        {
+            if ($idx++ -ne $AtIndex)
+            {
+                return
+            }
+
+            $gotOne = $true
+            if ($null -eq $Action)
+            {
+                return [Carbon_Windows_Service_FailureAction]::None
+            }
+
+            return [Carbon_Windows_Service_FailureAction]$Action.Type
+        }
+
+        end
+        {
+            if (-not $gotOne)
+            {
+                return [Carbon_Windows_Service_FailureAction]::None
+            }
+        }
+
+    }
+
+    function Write-Change
+    {
+        param(
+            [Parameter(Mandatory)]
+            [String] $Property,
+
+            [Parameter(Mandatory)]
+            [AllowNull()]
+            [AllowEmptyString()]
+            [String] $OldValue,
+
+            [Parameter(Mandatory)]
+            [AllowNull()]
+            [AllowEmptyString()]
+            [String] $NewValue
+        )
+
+        Write-Verbose "[${Name}] $('{0,-19}' -f $Property)${OldValue} -> ${NewValue}"
+    }
+
+    function ConvertTo-ArgValue
+    {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory, ValueFromPipeline)]
+            [AllowNull()]
+            [AllowEmptyString()]
+            [String] $InputObject
+        )
+
+        begin
+        {
+            Set-StrictMode -Version 'Latest'
+            Use-CallerPreference -Cmdlet $PSCmdlet -Session $ExecutionContext.SessionState
+
+            # How does PowerShell handle variables set to an empy string when part of a command?
+            if ($null -eq $script:quotesEmptyStringArgs)
+            {
+                $emptyStringArg = ''
+                $output = & (Join-Path -Path $script:moduleDirPath -ChildPath 'bin\args.exe') $emptyStringArg
+                $script:quotesEmptyStringArgs = ($output | Measure-Object).Count -eq 1
+                Write-Debug "quotesEmptyStringArgs  ${script:quotesEmptyStringArgs}"
+            }
+        }
+
+        process
+        {
+            if ($script:quotesEmptyStringArgs -or $null -eq $InputObject)
+            {
+                return $InputObject
+            }
+
+            if ($InputObject -eq '')
+            {
+                return '""'
+            }
+
+            return $InputObject -replace '"', '\"'
+        }
+    }
+
     if( $PSCmdlet.ParameterSetName -like 'CustomAccount*' )
     {
         if( $PSCmdlet.ParameterSetName -like '*WithCredential' )
         {
             $UserName = $Credential.UserName
-        }
-        elseif( $Password )
-        {
-            Write-CWarningOnce ('`Install-CService` function''s `Password` parameter is obsolete and will be removed in a future major version of Carbon. Please use the `Credential` parameter instead.')
-            $Credential = New-CCredential -UserName $UserName -Password $Password
         }
         else
         {
@@ -229,7 +300,7 @@ function Install-CService
         }
 
 
-        $identity = Resolve-CIdentity -Name $UserName -NoWarn
+        $identity = Resolve-CPrincipal -Name $UserName
 
         if( -not $identity )
         {
@@ -239,7 +310,7 @@ function Install-CService
     }
     else
     {
-        $identity = Resolve-CIdentity "NetworkService" -NoWarn
+        $identity = Resolve-CPrincipal "NetworkService"
     }
 
     if( -not (Test-Path -Path $Path -PathType Leaf) )
@@ -281,23 +352,27 @@ function Install-CService
         {
             $passwordArgName = 'password='
             $password = $Credential.GetNetworkCredential().Password
-            $passwordArgValue = $password | ConvertTo-CArgValue
+            $passwordArgValue = $password | ConvertTo-ArgValue
             $passwordArgMsg = " ${passwordArgName} $('*' * $password.Length)"
         }
 
         if( $PSCmdlet.ShouldProcess( $identity.FullName, "grant the log on as a service right" ) )
         {
-            Grant-CPrivilege -Identity $identity.FullName -Privilege SeServiceLogonRight -NoWarn
+            Grant-CPrivilege -Identity $identity.FullName -Privilege SeServiceLogonRight
         }
     }
 
     if( $PSCmdlet.ShouldProcess( $Path, ('grant {0} ReadAndExecute permissions' -f $identity.FullName) ) )
     {
-        Grant-CPermission -Identity $identity.FullName -Permission ReadAndExecute -Path $Path -NoWarn
+        Grant-CNtfsPermission -Identity $identity.FullName -Permission ReadAndExecute -Path $Path
     }
 
-    $doInstall = $false
-    if( -not $Force -and (Test-CService -Name $Name) )
+    $doInstall = $doFailureActions = $doDescription = $false
+    if ($Force -or -not (Test-CService -Name $Name))
+    {
+        $doInstall = $doFailureActions = $doDescription = $true
+    }
+    else
     {
         Write-Debug -Message ('Service {0} exists. Checking if configuration has changed.' -f $Name)
         $service = Get-Service -Name $Name
@@ -305,125 +380,126 @@ function Install-CService
         $dependedOnServiceNames =
             $service.ServicesDependedOn | Where-Object 'Name' -NE $Name | Select-Object -ExpandProperty 'Name'
 
-        if( $service.Path -ne $binPathArg )
+        if( $serviceConfig.Path -ne $binPathArg )
         {
-            Write-Verbose ('[{0}] Path              {1} -> {2}' -f $Name,$serviceConfig.Path,$binPathArg)
+            Write-Change 'Path' -OldValue $serviceConfig.Path -NewValue $binPathArg
             $doInstall = $true
         }
 
         # DisplayName, if not set, defaults to the service name. This makes it a little bit tricky to update.
         # If provided, make sure display name matches.
         # If not provided, reset it to an empty/default value.
-        if( $PSBoundParameters.ContainsKey('DisplayName') )
+        if ($PSBoundParameters.ContainsKey('DisplayName'))
         {
             if( $service.DisplayName -ne $DisplayName )
             {
-                Write-Verbose ('[{0}] DisplayName       {1} -> {2}' -f $Name,$service.DisplayName,$DisplayName)
+                Write-Change 'DisplayName' -OldValue $service.DisplayName -NewValue $DisplayName
                 $doInstall = $true
             }
         }
-        elseif( $service.DisplayName -ne $service.Name )
+        elseif ($service.DisplayName -ne $service.Name)
         {
-            Write-Verbose ('[{0}] DisplayName       {1} -> ' -f $Name,$service.DisplayName)
+            Write-Change 'DisplayName' -OldValue $service.DisplayName -NewValue ''
             $doInstall = $true
         }
 
-        if( $serviceConfig.FirstFailure -ne $OnFirstFailure )
+        $firstFailure = $serviceConfig.FailureActions | Select-FailureAction -AtIndex 0
+        if ($firstFailure -ne $OnFirstFailure)
         {
-            Write-Verbose ('[{0}] OnFirstFailure    {1} -> {2}' -f $Name,$serviceConfig.FirstFailure,$OnFirstFailure)
-            $doInstall = $true
+            Write-Change 'OnFirstFailure' -OldValue $firstFailure -NewValue $OnFirstFailure
+            $doFailureActions = $true
         }
 
-        if( $serviceConfig.SecondFailure -ne $OnSecondFailure )
+        $secondFailure = $serviceConfig.FailureActions | Select-FailureAction -AtIndex 1
+        if ($secondFailure -ne $OnSecondFailure)
         {
-            Write-Verbose ('[{0}] OnSecondFailure   {1} -> {2}' -f $Name,$serviceConfig.SecondFailure,$OnSecondFailure)
-            $doInstall = $true
+            Write-Change 'OnSecondFailure' -OldValue $secondFailure -NewValue $OnSecondFailure
+            $doFailureActions = $true
         }
 
-        if( $serviceConfig.ThirdFailure -ne $OnThirdFailure )
+        $thirdFailure = $serviceConfig.FailureActions | Select-FailureAction -AtIndex 2
+        if ($thirdFailure -ne $OnThirdFailure)
         {
-            Write-Verbose ('[{0}] OnThirdFailure    {1} -> {2}' -f $Name,$serviceConfig.ThirdFailure,$OnThirdFailure)
-            $doInstall = $true
+            Write-Change 'OnThirdFailure' -OldValue $thirdFailure -NewValue $OnThirdFailure
+            $doFailureActions = $true
         }
 
-        if( $serviceConfig.ResetPeriod -ne $ResetFailureCount )
+        # Failure reset period is in seconds, so make sure TimeSpan is in seconds for change detection.
+        $FailureResetPeriod = [TimeSpan]::New(0, 0, $FailureResetPeriod.TotalSeconds)
+        if( $serviceConfig.FailureResetPeriod -ne $FailureResetPeriod )
         {
-            Write-Verbose ('[{0}] ResetFailureCount {1} -> {2}' -f $Name,$serviceConfig.ResetPeriod,$ResetFailureCount)
-            $doInstall = $true
+            Write-Change 'FailureResetPeriod' -OldValue $serviceConfig.FailureResetPeriod -NewValue $FailureResetPeriod
+            $doFailureActions = $true
         }
 
-        $failureActions = $OnFirstFailure,$OnSecondFailure,$OnThirdFailure
-        if( ($failureActions | Where-Object { $_ -eq [Carbon.Service.FailureAction]::Reboot }) -and $serviceConfig.RebootDelay -ne $RebootDelay )
+        foreach ($actionType in @('Reboot', 'Restart', 'RunCommand'))
         {
-            Write-Verbose ('[{0}] RebootDelay       {1} -> {2}' -f $Name,$serviceConfig.RebootDelay,$RebootDelay)
-            $doInstall = $true
-        }
-
-        if( ($failureActions | Where-Object { $_ -eq [Carbon.Service.FailureAction]::Restart }) -and $serviceConfig.RestartDelay -ne $RestartDelay)
-        {
-            Write-Verbose ('[{0}] RestartDelay      {1} -> {2}' -f $Name,$serviceConfig.RestartDelay,$RestartDelay)
-            $doInstall = $true
-        }
-
-        if( $failureActions | Where-Object { $_ -eq [Carbon.Service.FailureAction]::RunCommand } )
-        {
-            if( $serviceConfig.FailureProgram -ne $Command )
+            # RebootDelay, RestartDelay, and RunCommandDelay
+            $varName = "${actionType}Delay"
+            $expectedDelay = Get-Variable -Name $varName -ValueOnly
+            $actions =
+                $serviceConfig.FailureActions |
+                Where-Object 'Type' -EQ $actionType |
+                Where-Object 'Delay' -NE $expectedDelay
+            if ($actions)
             {
-                Write-Verbose ('[{0}] Command           {1} -> {2}' -f $Name,$serviceConfig.FailureProgram,$Command)
-                $doInstall = $true
-            }
-
-            if( $serviceConfig.RunCommandDelay -ne $RunCommandDelay )
-            {
-                Write-Verbose ('[{0}] RunCommandDelay   {1} -> {2}' -f $Name,$serviceConfig.RunCommandDelay,$RunCommandDelay)
-                $doInstall = $true
+                foreach ($action in $actions)
+                {
+                    Write-Change $varName -OldValue $action.Delay -NewValue $expectedDelay
+                }
+                $doFailureActions = $true
             }
         }
 
-        if( $service.StartMode -ne $StartupType )
+        # Cast $null to an empty string.
+        if ([String]$serviceConfig.FailureCommand -ne $FailureCommand)
         {
-            Write-Verbose ('[{0}] StartupType       {1} -> {2}' -f $Name,$serviceConfig.StartType,$StartupType)
+            Write-Change 'FailureCommand' -OldValue $serviceConfig.FailureCommand -NewValue $FailureCommand
+            $doFailureActions = $true
+        }
+
+        if( $service.StartType -ne $StartupType )
+        {
+            Write-Change 'StartupType' -OldValue $service.StartType -NewValue $StartupType
             $doInstall = $true
         }
 
         if( $StartupType -eq [ServiceProcess.ServiceStartMode]::Automatic -and $Delayed -ne $serviceConfig.DelayedAutoStart )
         {
-            Write-Verbose ('[{0}] DelayedAutoStart  {1} -> {2}' -f $Name,$service.DelayedAutoStart,$Delayed)
+            Write-Change 'DelayedAutoStart' -OldValue $serviceConfig.DelayedAutoStart -NewValue $Delayed
             $doInstall = $true
         }
 
         if( ($Dependency | Where-Object { $dependedOnServiceNames -notcontains $_ }) -or `
             ($dependedOnServiceNames | Where-Object { $Dependency -notcontains $_ })  )
         {
-            Write-Verbose ('[{0}] Dependency        {1} -> {2}' -f $Name,($dependedOnServiceNames -join ','),($Dependency -join ','))
+            Write-Change 'Dependency' -OldValue ($dependedOnServiceNames -join ',') -NewValue ($Dependency -join ',')
             $doInstall = $true
         }
 
         if( $Description -and $serviceConfig.Description -ne $Description )
         {
-            Write-Verbose ('[{0}] Description       {1} -> {2}' -f $Name,$serviceConfig.Description,$Description)
-            $doInstall = $true
+            Write-Change 'Description' -OldValue $serviceConfig.Description -NewValue $Description
+            $doDescription = $true
         }
 
-        $currentIdentity = Resolve-CIdentity $serviceConfig.UserName -NoWarn
+        $currentIdentity = Resolve-CPrincipal $serviceConfig.UserName
         if( $currentIdentity.FullName -ne $identity.FullName )
         {
-            Write-Verbose ('[{0}] UserName          {1} -> {2}' -f $Name,$currentIdentity.FullName,$identity.FullName)
+            Write-Change 'UserName' -OldValue $currentIdentity.FullName -NewValue $identity.FullName
             $doinstall = $true
         }
-    }
-    else
-    {
-        $doInstall = $true
     }
 
     try
     {
-        if( -not $doInstall )
+        if (-not $doInstall -and -not $doFailureActions -and -not $doDescription)
         {
             Write-Debug -Message ('Skipping {0} service configuration: settings unchanged.' -f $Name)
             return
         }
+
+        $sc = Join-Path -Path ([Environment]::GetFolderPath('System')) -ChildPath 'sc.exe' -Resolve
 
         if( $Dependency )
         {
@@ -443,18 +519,16 @@ function Install-CService
             }
         }
 
-        $sc = Join-Path -Path ([Environment]::GetFolderPath('System')) -ChildPath 'sc.exe' -Resolve
-
         $startArg = 'auto'
-        if( $StartupType -eq [ServiceProcess.ServiceStartMode]::Automatic -and $Delayed )
+        if ($StartupType -eq [ServiceStartMode]::Automatic -and $Delayed)
         {
             $startArg = 'delayed-auto'
         }
-        elseif( $StartupType -eq [ServiceProcess.ServiceStartMode]::Manual )
+        elseif ($StartupType -eq [ServiceStartMode]::Manual)
         {
             $startArg = 'demand'
         }
-        elseif( $StartupType -eq [ServiceProcess.ServiceStartMode]::Disabled )
+        elseif ($StartupType -eq [ServiceStartMode]::Disabled)
         {
             $startArg = 'disabled'
         }
@@ -462,20 +536,17 @@ function Install-CService
         $service = Get-Service -Name $Name -ErrorAction Ignore
 
         $operation = 'create'
-        $serviceIsRunningStatus = @(
-                                      [ServiceProcess.ServiceControllerStatus]::Running,
-                                      [ServiceProcess.ServiceControllerStatus]::StartPending
-                                   )
+        $serviceIsRunningStatus = [ServiceControllerStatus]::Running, [ServiceControllerStatus]::StartPending
 
         if( -not $EnsureRunning )
         {
-            $EnsureRunning = ($StartupType -eq [ServiceProcess.ServiceStartMode]::Automatic)
+            $EnsureRunning = ($StartupType -eq [ServiceStartMode]::Automatic)
         }
 
         if( $service )
         {
             $EnsureRunning = ( $EnsureRunning -or ($serviceIsRunningStatus -contains $service.Status) )
-            if( $StartupType -eq [ServiceProcess.ServiceStartMode]::Disabled )
+            if ($StartupType -eq [ServiceStartMode]::Disabled)
             {
                 $EnsureRunning = $false
             }
@@ -489,9 +560,11 @@ function Install-CService
                 }
             }
 
-            if( -not ($service.Status -eq [ServiceProcess.ServiceControllerStatus]::Stopped) )
+            if (-not ($service.Status -eq [ServiceControllerStatus]::Stopped))
             {
-                Write-Warning "Unable to stop service '$Name' before applying config changes.  You may need to restart this service manually for any changes to take affect."
+                $msg = "Unable to stop service ""${Name}"" before applying configuration changes. You may need to " +
+                       'restart this service manually for any changes to take affect.'
+                Write-Warning $msg -WarningAction $WarningPreference
             }
             $operation = 'config'
         }
@@ -502,7 +575,7 @@ function Install-CService
         if ($Dependency -or $doInstall)
         {
             $dependencyArgName = 'depend='
-            $dependencyArgValue = $Dependency -join '/' | ConvertTo-CArgValue
+            $dependencyArgValue = $Dependency -join '/' | ConvertTo-ArgValue
             $dependencyArgMsg = " ${dependencyArgName} ${dependencyArgValue}"
         }
 
@@ -512,12 +585,13 @@ function Install-CService
         if ($DisplayName -or $doInstall)
         {
             $displayNameArgName ='DisplayName='
-            $displayNameArgValue = $DisplayName | ConvertTo-CArgValue
+            $displayNameArgValue = $DisplayName | ConvertTo-ArgValue
             $displayNameArgMsg = " ${displayNameArgName} ${displayNameArgValue}"
         }
 
-        $binPathArg = $binPathArg | ConvertTo-CArgValue
-        if ($PSCmdlet.ShouldProcess( "$Name [$Path]", "$operation service" ))
+        $target = "service ""${Name}"""
+        $binPathArg = $binPathArg | ConvertTo-ArgValue
+        if ($doInstall -and $PSCmdlet.ShouldProcess($target, $operation))
         {
             $msg = "${sc} ${operation} ${Name} binPath= ${binPathArg} start= ${startArg} obj= $($identity.FullName)" +
                    "${passwordArgMsg}${dependencyArgMsg}${displayNameArgMsg}"
@@ -535,21 +609,26 @@ function Install-CService
             if( $scExitCode -ne 0 )
             {
                 $reason = net helpmsg $scExitCode 2>$null | Where-Object { $_ }
+                if ($scExitCode -eq 1078)
+                {
+                    & $sc queryex $Name | Write-Verbose -Verbose
+                    & $sc qc $Name | Write-Verbose -Verbose
+                }
                 Write-Error ("Failed to {0} service '{1}'. {2} returned exit code {3}: {4}" -f $operation,$Name,$sc,$scExitCode,$reason)
                 return
             }
+        }
 
-            if( $Description )
+        if ($doDescription -and $PSCmdlet.ShouldProcess($target, 'set description'))
+        {
+            Write-Information "${sc} description ${Name} ${Description}"
+            & $sc 'description' $Name ($Description | ConvertTo-ArgValue) | Write-Verbose
+            $scExitCode = $LASTEXITCODE
+            if( $scExitCode -ne 0 )
             {
-                Write-Information "${sc} description ${Name} ${Description}"
-                & $sc 'description' $Name ($Description | ConvertTo-CArgValue) | Write-Verbose
-                $scExitCode = $LASTEXITCODE
-                if( $scExitCode -ne 0 )
-                {
-                    $reason = net helpmsg $scExitCode 2>$null | Where-Object { $_ }
-                    Write-Error ("Failed to set {0} service's description. {1} returned exit code {2}: {3}" -f $Name,$sc,$scExitCode,$reason)
-                    return
-                }
+                $reason = net helpmsg $scExitCode 2>$null | Where-Object { $_ }
+                Write-Error ("Failed to set {0} service's description. {1} returned exit code {2}: {3}" -f $Name,$sc,$scExitCode,$reason)
+                return
             }
         }
 
@@ -557,17 +636,18 @@ function Install-CService
         $secondAction = ConvertTo-FailureActionArg $OnSecondFailure
         $thirdAction = ConvertTo-FailureActionArg $OnThirdFailure
 
-        $commandArgValue = $Command | ConvertTo-CArgValue
-        if ($PSCmdlet.ShouldProcess($Name, 'setting service failure actions'))
+        $failureCommandArgValue = $FailureCommand | ConvertTo-ArgValue
+        if ($doFailureActions -and $PSCmdlet.ShouldProcess($target, 'set failure actions'))
         {
-            $msg = "${sc} failure ${Name} reset= ${ResetFailureCount} " +
-                   "${firstAction}/${secondAction}/${thirdAction} command= ${commandArgValue}"
+            $failureResetPeriodSeconds = [int]$FailureResetPeriod.TotalSeconds
+            $msg = "${sc} failure ${Name} reset= ${failureResetPeriodSeconds} " +
+                   "${firstAction}/${secondAction}/${thirdAction} command= ${failureCommandArgValue}"
             Write-Information $msg
             & $sc failure `
                   $Name `
-                  reset= $ResetFailureCount `
+                  reset= $failureResetPeriodSeconds `
                   actions= $firstAction/$secondAction/$thirdAction `
-                  command= $commandArgValue |
+                  command= $failureCommandArgValue |
                 Write-Verbose
             $scExitCode = $LASTEXITCODE
             if( $scExitCode -ne 0 )
@@ -585,7 +665,7 @@ function Install-CService
             if( $PSCmdlet.ShouldProcess( $Name, 'start service' ) )
             {
                 Start-Service -Name $Name -ErrorAction $ErrorActionPreference -WarningAction SilentlyContinue
-                if( (Get-Service -Name $Name).Status -ne [ServiceProcess.ServiceControllerStatus]::Running )
+                if( (Get-Service -Name $Name).Status -ne [ServiceControllerStatus]::Running )
                 {
                     if( $PSCmdlet.ParameterSetName -like 'CustomAccount*' -and -not $Credential )
                     {

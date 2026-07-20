@@ -1,6 +1,7 @@
 
 using namespace System.Security.AccessControl
 using namespace System.Security.Principal
+using namespace System.ServiceProcess
 
 # Copyright WebMD Health Services
 #
@@ -24,6 +25,8 @@ Set-StrictMode -Version 'Latest'
 $script:moduleDirPath = $PSScriptRoot
 
 $script:numaEnabled = $null
+#
+$script:quotesEmptyStringArgs = $null
 
 $modulesDirPath = Join-Path -Path $PSScriptRoot -ChildPath 'M' -Resolve
 
@@ -40,6 +43,12 @@ Import-Module -Name (Join-Path -Path $modulesDirPath -ChildPath 'PureInvoke\Pure
               -Verbose:$false
 Import-Module -Name (Join-Path -Path $modulesDirPath -ChildPath 'Carbon.Accounts\Carbon.Accounts.psm1' -Resolve) `
               -Function @('Resolve-CPrincipal') `
+              -Verbose:$false
+Import-Module -Name (Join-Path -Path $modulesDirPath -ChildPath 'Carbon.Security\Carbon.Security.psm1' -Resolve) `
+              -Function @('Grant-CPrivilege') `
+              -Verbose:$false
+Import-Module -Name (Join-Path -Path $modulesDirPath -ChildPath 'Carbon.FileSystem\Carbon.FileSystem.psm1' -Resolve) `
+              -Function @('Grant-CNtfsPermission') `
               -Verbose:$false
 
 [Flags()]
@@ -59,6 +68,14 @@ enum Carbon_Windows_Service_ServiceAccessRights
     WriteDac            = 0x40000
     WriteOwner          = 0x80000
     FullControl         = 0xf01ff
+}
+
+enum Carbon_Windows_Service_FailureAction
+{
+		None       = 0
+		Restart    = 1
+		Reboot     = 2
+		RunCommand = 3
 }
 
 # Classes are cached by PowerShell. To support different versions of a class loaded side-by-side in the same PowerShell

@@ -8,7 +8,21 @@ Set-StrictMode -Version 'Latest'
 BeforeAll {
     Set-StrictMode -Version 'Latest'
 
-    Import-Module -Name (Join-Path -Path $PSScriptRoot -ChildPath '..\Carbon' -Resolve) -Verbose:$false
+    $carbonModuleDirPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Carbon.Windows.Service' -Resolve
+    Import-Module -Name $carbonModuleDirPath -Verbose:$false
+    $psModulesDirPath = Join-Path -Path $carbonModuleDirPath -ChildPath 'M' -Resolve
+    Import-Module -Name (Join-Path -Path $psModulesDirPath -ChildPath 'Carbon.Accounts' -Resolve) `
+                  -Function @('Resolve-CPrincipalName') `
+                  -Prefix 'T' `
+                  -Verbose:$false
+    Import-Module -Name (Join-Path -Path $psModulesDirPath -ChildPath 'Carbon.FileSystem' -Resolve) `
+                  -Function @('Test-CNtfsPermission') `
+                  -Prefix 'T' `
+                  -Verbose:$false
+    Import-Module -Name (Join-Path -Path $psModulesDirPath -ChildPath 'Carbon.Security' -Resolve) `
+                  -Function @('Get-CPrivilege', 'Test-CPrivilege') `
+                  -Prefix 'T' `
+                  -Verbose:$false
 
     $script:serviceNameSuffix = [IO.Path]::GetRandomFileName() -replace '\.', ''
     $script:testDirPath = ''
@@ -17,13 +31,19 @@ BeforeAll {
     $script:serviceNamePrefix = 'CarbonTestInstallCService'
     $script:serviceName = $null
     $script:serviceAcct = "CISvc${script:serviceNameSuffix}"
-    # Make sure we escape characters that sc.exe needs to have escaped.
+    # Make sure password contains characters that need to be escaped when passed to sc.exe.
     $servicePassword = ConvertTo-SecureString """a1""'~!@# $%^&*(""" -Force -AsPlainText
     $script:serviceCredential = [pscredential]::New($script:serviceAcct, $servicePassword)
-    Install-CUser -Credential $script:serviceCredential `
-                  -Description "Account for testing the Carbon Install-CService function."
-    $script:defaultServiceAccountName = Resolve-CIdentityName -Name 'NT AUTHORITY\NetworkService'
-    $script:inModule = @{ ModuleName = 'Carbon' }
+
+    # This must be run in the background so we don't load Carbon into the current session so we ensure
+    # Carbon.Windows.Service is no longer using Carbon's types.
+    Start-Job {
+        Import-Module -Name (Join-Path -Path $using:PSScriptRoot -ChildPath '..\PSModules\Carbon' -Resolve)
+        Install-CUser -Credential $using:serviceCredential -Description "Carbon Install-CService"
+    } | Receive-Job -Wait -AutoRemoveJob -ErrorAction Stop
+
+    $script:defaultServiceAccountName = Resolve-TCPrincipalName -Name 'NT AUTHORITY\NetworkService'
+    $script:inModule = @{ ModuleName = 'Carbon.Windows.Service' }
 
     function ThenError
     {
@@ -152,13 +172,13 @@ BeforeAll {
 
         if ($HasStartMode)
         {
-            $service.StartMode | Should -Be $HasStartMode
+            $service.StartType | Should -Be $HasStartMode
         }
 
         # Can be false.
         if ($PSBoundParameters.ContainsKey('StartsDelayed'))
         {
-            $service.DelayedAutoStart | Should -Be $StartsDelayed.IsPresent
+            $config.DelayedAutoStart | Should -Be $StartsDelayed.IsPresent
         }
 
         if ($Is)
@@ -174,10 +194,14 @@ BeforeAll {
         $expectedPrincipalName = Resolve-TCPrincipalName $RunAs
         $expectedPrincipalName | Should -Not -BeNullOrEmpty -Because "identity ${RunAs} should exist"
         $expectedPrincipalName = $expectedPrincipalName.Replace("$([Environment]::MachineName)\", '.\')
-        $service.UserName | Should -Be $expectedPrincipalName
+        $config.UserName | Should -Be $expectedPrincipalName
 
         Test-TCNtfsPermission -Path $Runs -Identity $RunAs -Permission ReadAndExecute | Should -BeTrue
-        Test-TCPrivilege -Identity $RunAs -Privilege SeServiceLogonRight | Should -BeTrue
+        # The OS handles privileges of built-in accounts.
+        if ($RunAs -notin @('NetworkService'))
+        {
+            Test-TCPrivilege -Identity $RunAs -Privilege SeServiceLogonRight | Should -BeTrue
+        }
 
         if ($HasDisplayName)
         {
@@ -194,54 +218,66 @@ BeforeAll {
 
         if ($ResetsFailuresEvery)
         {
-            $config.ResetPeriod | Should -Be $ResetsFailuresEvery.TotalMilliseconds
+            $config.FailureResetPeriod | Should -Be $ResetsFailuresEvery
         }
 
         if ($OnFirstFailure)
         {
-            $config.FirstFailure | Should -Be $OnFirstFailure
+            $config.FailureActions |
+                Select-Object -First 1 |
+                Select-Object -ExpandProperty 'Type' |
+                Should -Be $OnFirstFailure
         }
 
         if ($OnSecondFailure)
         {
-            $config.SecondFailure | Should -Be $OnSecondFailure
+            $config.FailureActions |
+                Select-Object -Skip 1 |
+                Select-Object -First 1 |
+                Select-Object -ExpandProperty 'Type' |
+                Should -Be $OnSecondFailure
         }
 
         if ($OnThirdFailure)
         {
-            $config.ThirdFailure | Should -Be $OnThirdFailure
+            $config.FailureActions |
+                Select-Object -Skip 2 |
+                Select-Object -First 1 |
+                Select-Object -ExpandProperty 'Type' |
+                Should -Be $OnThirdFailure
         }
 
-        if ($HasRestartDelay)
+        if (-not $HasRestartDelay)
         {
-            $config.RestartDelay | Should -Be $HasRestartDelay.TotalMilliseconds
+            $HasRestartDelay = [TimeSpan]::Zero
         }
-        else
+        $config.FailureActions |
+            Where-Object 'Type' -EQ 'Restart' |
+            Select-Object -ExpandProperty 'Delay' |
+            ForEach-Object { $_ | Should -Be $HasRestartDelay }
+
+        if (-not $HasRebootDelay)
         {
-            $config.RestartDelay | Should -Be 0
+            $HasRebootDelay = [TimeSpan]::Zero
+        }
+        $config.FailureActions |
+            Where-Object 'Type' -EQ 'Reboot' |
+            Select-Object -ExpandProperty 'Delay' |
+            ForEach-Object { $_ | Should -Be $HasRebootDelay }
+
+        if (-not $HasRunCommandDelay)
+        {
+            $HasRunCommandDelay = [TimeSpan]::Zero
         }
 
-        if ($HasRebootDelay)
-        {
-            $config.RebootDelay | Should -Be $HasRebootDelay.TotalMilliseconds
-        }
-        else
-        {
-            $config.RebootDelay | Should -Be 0
-        }
-
-        if ($HasRunCommandDelay)
-        {
-            $config.RunCommandDelay | Should -Be $HasRunCommandDelay.TotalMilliseconds
-        }
-        else
-        {
-            $config.RunCommandDelay | Should -Be 0
-        }
+        $config.FailureActions |
+            Where-Object 'Type' -EQ 'RunCommand' |
+            Select-object -ExpandProperty 'Delay' |
+            ForEach-Object { $_ | Should -Be $HasRunCommandDelay }
 
         if ($RunsFailureCommand)
         {
-            $config.FailureProgram | Should -Be $RunsFailureCommand
+            $config.FailureCommand | Should -Be $RunsFailureCommand
         }
     }
 
@@ -290,7 +326,7 @@ BeforeAll {
         Mock -CommandName 'Join-Path' @inModule -ParameterFilter { $ChildPath -in @('sc.exe', 'sc') }
         Mock -CommandName 'Get-Command' @inModule -ParameterFilter { $Name -in @('sc.exe', 'sc') }
         Mock -CommandName 'Grant-CPrivilege' @inModule
-        Mock -CommandName 'Grant-CPermission' @inModule
+        Mock -CommandName 'Grant-CNtfsPermission' @inModule
         $installErrors = @()
         $output = $null
         try
@@ -311,7 +347,10 @@ BeforeAll {
         }
         else
         {
-            $installErrors | Should -BeNullOrEmpty -Because 'Install-CService should be idempotent'
+            $installErrors |
+                # Ignore any handled "The parameter is incorrect." error when retrieving PreferredNode configuration.
+                Where-Object { $_ -notlike '*PreferredNode*87*' } |
+                Should -BeNullOrEmpty -Because 'Install-CService should be idempotent'
         }
     }
 }
@@ -320,7 +359,7 @@ AfterAll {
     Get-Service -Name 'Carbon*' |
         Where-Object 'Name' -NotIn @('CarbonBlack') |
         ForEach-Object {
-            $_ | Stop-Service
+            $_ | Stop-Service -ErrorAction Ignore
             sc.exe delete $_.Name
         }
 }
@@ -330,15 +369,17 @@ Describe 'Install-CService' {
         $script:testDirPath = Join-Path -Path $TestDrive -ChildPath $script:testNum
         New-Item -Path $script:testDirPath -ItemType 'Directory'
 
-        Copy-Item -Path (Join-Path -Path $PSScriptRoot -ChildPath 'Service\NoOpService.exe' -Resolve) `
+        Copy-Item -Path (Join-Path -Path $PSScriptRoot -ChildPath 'NoOpService.exe' -Resolve) `
                   -Destination $script:testDirPath
         $script:servicePath = Join-Path -Path $script:testDirPath -ChildPath 'NoOpService.exe' -Resolve
 
-        $numCarbonServices =
-            Get-Service -Name ('{0}*' -f $script:serviceNamePrefix) |
-            Measure-Object |
-            Select-Object -ExpandProperty 'Count'
-        $script:serviceName = "${script:serviceNamePrefix}-${script:serviceNameSuffix}-$($numCarbonServices + 1)"
+        $svcNum = $script:testNum
+        do
+        {
+            $script:serviceName = "${script:serviceNamePrefix}-${script:serviceNameSuffix}-${svcNum}"
+            $svcNum += 1
+        }
+        while ((Test-CService -Name $script:serviceName))
         $Global:Error.Clear()
     }
 
@@ -348,23 +389,24 @@ Describe 'Install-CService' {
 
     Context 'service does not exist' {
         It 'sets all properties' {
-            $dependencies = Get-Service -ErrorAction Ignore | Select-Object -First 2 | Select-Object -ExpandProperty 'Name'
+            $dependencies =
+                Get-Service -ErrorAction Ignore | Select-Object -First 2 | Select-Object -ExpandProperty 'Name'
             WhenInstalling -WithArgs @{
                 Name = $script:serviceName
                 Path = $script:servicePath
                 ArgumentList = @('-k', 'Fubar')
                 StartUpType = 'Manual'
-                DisplayName = 'carbon display name 001'
+                DisplayName = "${script:serviceName} Display Name"
                 Description = 'description 001'
                 Dependency = $dependencies
-                ResetFailureCount = 3456
+                FailureResetPeriod = '0:34:56.789'
                 OnFirstFailure = 'Restart'
-                RestartDelay = 1234
+                RestartDelay = '0:00:01.234'
                 OnSecondFailure = 'RunCommand'
-                Command = 'echo "Failed!"'
-                RunCommandDelay = 5678
+                FailureCommand = 'echo "Failed!"'
+                RunCommandDelay = '0:00:05.678'
                 OnThirdFailure = 'Reboot'
-                RebootDelay = 9012
+                RebootDelay = '0:00:09.012'
             } -IsIdempotent
             ThenError -IsEmpty
             ThenOutput -IsEmpty
@@ -373,10 +415,10 @@ Describe 'Install-CService' {
                         -WithArgs "-k Fubar" `
                         -Is 'Stopped' `
                         -HasStartMode Manual `
-                        -HasDisplayName 'carbon display name 001' `
+                        -HasDisplayName "${script:serviceName} Display Name" `
                         -HasDescription 'description 001' `
                         -DependsOn $dependencies `
-                        -ResetsFailuresEvery '0:00:03.456' `
+                        -ResetsFailuresEvery '0:34:57.000' `
                         -OnFirstFailure 'Restart' `
                         -HasRestartDelay '0:00:01.234' `
                         -OnSecondFailure 'RunCommand' `
@@ -401,8 +443,8 @@ Describe 'Install-CService' {
             ThenService -RunAs 'SYSTEM'
         }
 
-        # We don't have the ability to create a gMSA or virtual account, but we can kind of mimic it by allowing someone to
-        # pass any username without a password.
+        # We don't have the ability to create a gMSA or virtual account, but we can kind of mimic it by allowing someone
+        # to pass any username without a password.
         It 'can install service to run as gMSA or virtual account' {
             WhenInstalling -WithArgs @{ UserName = $script:serviceAcct ; ErrorAction = 'SilentlyContinue' }
             ThenError -Matches 'cannot start service'
@@ -431,12 +473,12 @@ Describe 'Install-CService' {
                         -HasDescription '' `
                         -DependsOn @() `
                         -ResetsFailuresEvery '0:00:00' `
-                        -OnFirstFailure 'TakeNoAction' `
+                        -OnFirstFailure 'None' `
                         -HasRestartDelay '0:00:00' `
-                        -OnSecondFailure 'TakeNoAction' `
+                        -OnSecondFailure 'None' `
                         -RunsFailureCommand '' `
                         -HasRunCommandDelay '0:00:00' `
-                        -OnThirdFailure 'TakeNoAction' `
+                        -OnThirdFailure 'None' `
                         -HasRebootDelay '0:00:00' `
                         -RunAs 'NETWORKSERVICE'
         }
@@ -484,18 +526,18 @@ Describe 'Install-CService' {
                 ThenService = @{ OnFirstFailure = 'Restart' ; HasRestartDelay = '0:01:00' }
             },
             @{
-                PropertyName = 'ResetFailureCount'
-                InstallWith = @{ ResetFailurecount = 3456 }
-                ThenService = @{ ResetsFailuresEvery = '0:00:03.456'}
+                PropertyName = 'FailureResetPeriod'
+                InstallWith = @{ FailureResetPeriod = '0:00:03.456' }
+                ThenService = @{ ResetsFailuresEvery = '0:00:03.00' }
             },
             @{
                 PropertyName = 'RestartDelay'
-                InstallWith = @{ RestartDelay = 78901 }
+                InstallWith = @{ RestartDelay = '0:07:08.901' }
                 ThenService = @{ HasRestartDelay = '0:00:00' }
             },
             @{
                 PropertyName = 'RebootDelay'
-                InstallWith = @{ RebootDelay = 2345 }
+                InstallWith = @{ RebootDelay = '0:00:02.345' }
                 ThenService = @{ HasRebootDelay = '0:00:00:00' }
             },
             @{
@@ -505,12 +547,12 @@ Describe 'Install-CService' {
             },
             @{
                 PropertyName = 'FailureCommand'
-                InstallWith = @{ Command = 'echo "Failed 2!"' }
+                InstallWith = @{ FailureCommand = 'echo "Failed 2!"' }
                 ThenService = @{ RunsFailureCommand = ''}
             },
             @{
                 PropertyName = 'RunCommandDelay'
-                InstallWith = @{ RunCommandDelay = 6789012 }
+                InstallWith = @{ RunCommandDelay = '6.07:08:09.012' }
                 ThenService = @{ HasRunCommandDelay = '0:00:00' }
             },
             @{
@@ -563,12 +605,12 @@ Describe 'Install-CService' {
                 HasDescription = ''
                 DependsOn = @()
                 ResetsFailuresEvery = '0:00:00'
-                OnFirstFailure = 'TakeNoAction'
+                OnFirstFailure = 'None'
                 HasRestartDelay = '0:00:00'
-                OnSecondFailure = 'TakeNoAction'
+                OnSecondFailure = 'None'
                 RunsFailureCommand = ''
                 HasRunCommandDelay = '0:00:00'
-                OnThirdFailure = 'TakeNoAction'
+                OnThirdFailure = 'None'
                 HasRebootDelay = '0:00:00'
                 RunAs = 'NETWORKSERVICE'
             }
@@ -608,7 +650,7 @@ Describe 'Install-CService' {
 
             $installArgName = "${FailureAction}Delay"
             $NewDelay = [TimeSpan]$NewDelay
-            $installArgs = @{ OnFirstFailure = $FailureAction ; $installArgName = $NewDelay.TotalMilliseconds }
+            $installArgs = @{ OnFirstFailure = $FailureAction ; $installArgName = $NewDelay }
             WhenInstalling -WithArgs $installArgs -IsIdempotent
 
             $hasNewDelay = @{ $thenServiceDelayArgName = $NewDelay }
@@ -618,7 +660,7 @@ Describe 'Install-CService' {
         It 're-installs idempotently when FailureCommand changes' {
             WhenInstalling -WithArgs @{ OnFirstFailure = 'RunCommand' }
             ThenService -OnFirstFailure 'RunCommand' -HasRunCommandDelay '0:00:00' -RunsFailureCommand ''
-            WhenInstalling -WithArgs @{ OnFirstFailure = 'RunCommand' ; Command = 'echo "Fail 3!"' } -IsIdempotent
+            WhenInstalling -WithArgs @{ OnFirstFailure = 'RunCommand' ; FailureCommand = 'echo "Fail 3!"' } -IsIdempotent
             ThenService -OnFirstFailure 'RunCommand' -HasRunCommandDelay '0:00:00' -RunsFailureCommand 'echo "Fail 3!"'
         }
     }
@@ -645,17 +687,17 @@ Describe 'Install-CService' {
                 Path = $script:servicePath
                 ArgumentList = @('-k', 'Fubar')
                 StartUpType = 'Manual'
-                DisplayName = 'carbon display name 001'
+                DisplayName = "${script:serviceName} Display Name"
                 Description = 'description 001'
                 Dependency = @('W32Time')
-                ResetFailureCount = 3456
+                FailureResetPeriod = '0:00:03.456'
                 OnFirstFailure = 'Restart'
-                RestartDelay = 1234
+                RestartDelay = '0:00:01.234'
                 OnSecondFailure = 'RunCommand'
-                Command = 'echo "Failed!"'
-                RunCommandDelay = 5678
+                FailureCommand = 'echo "Failed!"'
+                RunCommandDelay = '0:00:05.678'
                 OnThirdFailure = 'Reboot'
-                RebootDelay = 9012
+                RebootDelay = '0.00:00:09.012'
             }
             ThenError -IsEmpty
             ThenOutput -IsEmpty
@@ -669,12 +711,12 @@ Describe 'Install-CService' {
                         -HasDescription '' `
                         -DependsOn @() `
                         -ResetsFailuresEvery '0:00:00:00' `
-                        -OnFirstFailure 'TakeNoAction' `
+                        -OnFirstFailure 'None' `
                         -HasRestartDelay '0:00:00' `
-                        -OnSecondFailure 'TakeNoAction' `
+                        -OnSecondFailure 'None' `
                         -RunsFailureCommand '' `
                         -HasRunCommandDelay '0:00:00' `
-                        -OnThirdFailure 'TakeNoAction' `
+                        -OnThirdFailure 'None' `
                         -HasRebootDelay '0:00:00' `
                         -RunAs 'NETWORKSERVICE'
     }
@@ -746,7 +788,7 @@ Describe 'Install-CService' {
         }
     }
 
-    It 'returns service object' {
+    It 'can return service object' {
         WhenInstalling -WithArgs @{ StartupType = 'Automatic' ; PassThru = $true }
         ThenOutput -IsServiceController
 

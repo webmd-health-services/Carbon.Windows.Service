@@ -14,6 +14,26 @@ Build:
 - Exec: appveyor UpdateBuild -Version "$(WHISKEY_SEMVER2)+$(WHISKEY_BUILD_NUMBER)"
   .OnlyBy: BuildServer
 
+# powershell.exe and pwsh.exe handle arguments passed to sc.exe different. This tool helps us figure out how the args
+# are handled.
+- PowerShell: |
+    New-Item -Path '.\Carbon.Windows.Service\bin' -ItemType 'Directory' -ErrorAction Ignore
+    $typeDef = @'
+        using System;
+
+        public static class Args
+        {
+            public static void Main(string[] args)
+            {
+                foreach (var arg in args)
+                {
+                    Console.WriteLine(arg);
+                }
+            }
+        }
+    '@
+    Add-Type -TypeDefinition $typeDef -OutputType ConsoleApplication -OutputAssembly .\Carbon.Windows.Service\bin\args.exe
+
 # Dot-sourcing files is expensive. Move all functions into .psm1 file to improve import speed. Do this before testing
 # to ensure the module still works.
 - MergeFile:
