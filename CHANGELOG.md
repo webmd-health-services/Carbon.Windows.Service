@@ -52,6 +52,7 @@ If switching from Carbon,
   * Rename `Command` parameter to `FailureCommand`.
   * Removed `Password` parameter. Use `Credential` parameter instead.
   * Rename usages of `Dependencies` to `Dependency` parameter. The `Dependencies` alias removed.
+* Replace usage of `Remove-Service` alias with `Uninstall-CService` function.
 
 ### Added
 
@@ -74,6 +75,7 @@ If switching from Carbon,
     * [`Triggers`](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_trigger)
     * [`LaunchProtected`](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_launch_protected_info)
 * `Get-CServiceSecurityDescriptor` sets `Owner` and `Group` on the returned security descriptor object.
+* `Uninstall-CService` writes an information message when uninstalling a service.
 
 ### Changed
 
@@ -142,3 +144,4 @@ The following changed from Carbon:
     * `RestartDelay`
     * `RestartDelayMinutes`
 * `Get-ServicePermissions` alias to `Get-CServicePermission` function.
+* `Remove-Service` alias to `Uninstall-CService` function.
