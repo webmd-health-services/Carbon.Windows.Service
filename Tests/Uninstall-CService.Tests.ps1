@@ -1,15 +1,18 @@
 
 #Requires -Version 5.1
+#Requires -RunAsAdministrator
 Set-StrictMode -Version 'Latest'
 
 BeforeAll {
     Set-StrictMode -Version 'Latest'
 
-    & (Join-Path -Path $PSScriptRoot -ChildPath 'Initialize-CarbonTest.ps1' -Resolve)
+    $carbonModuleDirPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Carbon.Windows.Service' -Resolve
+    Import-Module -Name $carbonModuleDirPath -Verbose:$false
 
     $script:serviceBaseName = 'CarbonUninstallServiceTest'
     $script:serviceName = $script:serviceBaseName
-    $script:servicePath = Join-Path -Path $PSScriptRoot -ChildPath 'Service\NoOpService.exe' -Resolve
+    $script:servicePath = Join-Path -Path $PSScriptRoot -ChildPath 'NoOpService.exe' -Resolve
+    $script:inModule = @{ ModuleName = 'Carbon.Windows.Service' }
 
     function Uninstall-TestService
     {
@@ -22,7 +25,7 @@ BeforeAll {
 
     function GivenServiceStillRunsAfterStop
     {
-        Mock -CommandName 'Stop-Service' -ModuleName 'Carbon'
+        Mock -CommandName 'Stop-Service' @script:inModule
     }
 
     function ThenServiceUninstalled
@@ -68,9 +71,9 @@ AfterAll {
 
 Describe 'Uninstall-CService' {
     BeforeEach {
-        $Global:Error.Clear()
         Uninstall-TestService
         Install-CService -Name $script:serviceName -Path $script:servicePath
+        $Global:Error.Clear()
     }
 
     It 'should remove service' {
@@ -107,17 +110,17 @@ Describe 'Uninstall-CService' {
 
     It 'when service never stops' {
         GivenServiceStillRunsAfterStop
-        Mock -CommandName 'Get-Process' -ModuleName 'Carbon' { return [pscustomobject]@{ Id = $Id[0] } }
-        Mock -CommandName 'Start-Sleep' -ModuleName 'Carbon'
+        Mock -CommandName 'Get-Process' @script:inModule { return [pscustomobject]@{ Id = $Id[0] } }
+        Mock -CommandName 'Start-Sleep' @script:inModule
         WhenUninstalling $script:serviceName  -ErrorAction SilentlyContinue
-        $Global:Error[0] | Should -Match 'Failed to kill'
+        $Global:Error | Should -Match 'Failed to kill'
         ThenServiceUninstalled $script:serviceName
     }
 
     It 'when service stops before getting killed' {
         GivenServiceStillRunsAfterStop
         $global:callCount = 0
-        Mock -CommandName 'Get-Process' -ModuleName 'Carbon' -MockWith {
+        Mock -CommandName 'Get-Process' @script:inModule -MockWith {
             $global:callCount++
             if( $global:callCount -eq 1 )
             {
@@ -136,7 +139,7 @@ Describe 'Uninstall-CService' {
                 }
             }
         }
-        Mock -CommandName 'Stop-Process' -ModuleName 'Carbon' -MockWith {
+        Mock -CommandName 'Stop-Process' @script:inModule -MockWith {
             Write-Error 'FUBAR!' -ErrorAction $PesterBoundParameters['ErrorAction'] }
         WhenUninstalling $script:serviceName
         $Global:Error | Where-Object { $_ -match 'FUBAR' } | Should -BeNullOrEmpty

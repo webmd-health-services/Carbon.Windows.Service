@@ -55,6 +55,7 @@ If switching from Carbon,
   * Rename usages of `RestartDelay` parameter to `FailureRestartDelay`.
   * Rename usages of `RebootDelay` parameter to `FailureRebootDelay`.
   * Rename usages of `RunCommandDelay` parameter to `FailureRunCommandDelay`.
+* Replace usage of `Remove-Service` alias with `Uninstall-CService` function.
 
 ### Added
 
@@ -77,6 +78,7 @@ If switching from Carbon,
     * [`Triggers`](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_trigger)
     * [`LaunchProtected`](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_launch_protected_info)
 * `Get-CServiceSecurityDescriptor` sets `Owner` and `Group` on the returned security descriptor object.
+* `Uninstall-CService` writes an information message when uninstalling a service.
 
 ### Changed
 
@@ -148,3 +150,4 @@ The following changed from Carbon:
     * `RestartDelay`
     * `RestartDelayMinutes`
 * `Get-ServicePermissions` alias to `Get-CServicePermission` function.
+* `Remove-Service` alias to `Uninstall-CService` function.
