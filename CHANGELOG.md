@@ -62,6 +62,9 @@ If switching from Carbon,
     `Grant-CServicePermission -Name $svcName -PrincipalName $user -QueryConfig -EnumerateDependents` would be changed
     to `Grant-CServicePermission -Name $svcName -PrincipalName $user -Permission 'QueryConfig, EnumerateDependents'`.
 * Rename usages of the `Revoke-CServicePermission` function's `Identity` parameter to `PrincipalName`.
+* `Grant-CServiceControlPermission`:
+  * Rename usages of the `ServiceName` parameter to `Name`.
+  * Rename usages of the `Identity` parameter to `PrincipalName`.
 
 ### Added
 
@@ -91,7 +94,9 @@ If switching from Carbon,
 * `Revoke-CServicePermission`:
   * `WhatIf` support.
   * writes an information message when revoking permission.
-
+* `Grant-CServiceControlPermission`:
+  * `WhatIf support
+  * writes an information message when granting permission.
 
 ### Changed
 
@@ -122,6 +127,9 @@ The following changed from Carbon:
     `Permission` as `'QueryConfig, EnumerateDependents'`.
   * only sets permissions if they are different than existing permissions
 * Renamed the `Revoke-CServicePermission` function's `Identity` parameter to `PrincipalName`.
+* `Grant-CServiceControlPermission`:
+  * Renamed the `ServiceName` parameter to `Name`.
+  * Renamed the `Identity` parameter to `PrincipalName`.
 
 ### Fixed
 

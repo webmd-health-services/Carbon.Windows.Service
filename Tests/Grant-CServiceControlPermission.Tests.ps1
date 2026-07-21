@@ -1,67 +1,77 @@
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-# 
-#     http://www.apache.org/licenses/LICENSE-2.0
-# 
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
-$serviceBaseName = 'CarbonGrantControlServiceTest'
-$serviceName = $serviceBaseName
-$servicePath = Join-Path $TestDir NoOpService.exe
+using module ..\Carbon.Windows.Service
 
-$user = 'CrbnGrantCntrlSvcUsr'
-$password = [Guid]::NewGuid().ToString().Substring(0,9) + "Aa1"
-$userPermStartPattern = "/pace =$($env:ComputerName)\$user*"
-    
-function Start-TestFixture
-{
-    & (Join-Path -Path $PSScriptRoot -ChildPath '..\Initialize-CarbonTest.ps1' -Resolve)
+#Requires -Version 5.1
+#Requires -RunAsAdministrator
+Set-StrictMode -Version 'Latest'
+
+BeforeAll {
+    Set-StrictMode -Version 'Latest'
+
+    $cwsDirPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Carbon.Windows.Service' -Resolve
+    Import-Module -Name $cwsDirPath -Verbose:$false
+    Import-Module -Name (Join-Path -Path $cwsDirPath -ChildPath 'M\Carbon.Accounts' -Resolve) `
+                  -Function @('Install-CLocalGroup', 'Uninstall-CLocalGroup') `
+                  -Prefix 'T' `
+                  -Verbose:$false
+
+    $script:groupName = 'Everyone'
+    if ((Get-Command -Name 'Get-LocalGroup' -CommandType Cmdlet -ErrorAction Ignore))
+    {
+        $script:groupName = 'CGrantSvcCtrlPerm'
+        Install-TCLocalGroup -Name $script:groupName -Description 'Carbon Grant-CServiceControlPermission'
+    }
+
+    function ThenPermission
+    {
+        param(
+            [Parameter(Mandatory, ParameterSetName='Is')]
+            [AllowNull()]
+            [switch] $IsControl,
+
+            [Parameter(Mandatory, ParameterSetName='IsNull')]
+            [switch] $IsNull
+        )
+
+        $perm = Get-CServicePermission -Name $serviceName -PrincipalName $script:groupName
+
+        if ($IsControl)
+        {
+            $perm | Should -Not -BeNullOrEmpty
+            $perm.ServiceAccessRights | Should -Be 'QueryStatus, EnumerateDependents, Start, Stop'
+        }
+        else
+        {
+            $perm | Should -BeNullOrEmpty
+        }
+    }
 }
 
-function Start-Test
-{
-    Install-User -username $user -Password $password
-    
-    $serviceName = $serviceBaseName + ([Guid]::NewGuid().ToString())
-    Install-Service -Name $serviceName -Path $servicePath -Username $user -Password $password
+AfterAll {
+    if ($script:groupName -ne 'Everyone')
+    {
+        Uninstall-TCLocalGroup -Name $script:groupName
+    }
 }
 
-function Stop-Test
-{
-    Uninstall-Service -Name $serviceName
-    Uninstall-User -Username $user
-}
+Describe 'Grant-CServiceControlPermission' {
+    BeforeEach {
+        $serviceName = 'CarbonGrantServiceControlPermission'
+        $servicePath = Join-Path -Path $PSScriptRoot -ChildPath 'NoOpService.exe' -Resolve
+        Install-CService -Name $serviceName -Path $servicePath -StartupType Disabled
 
-function Test-ShouldGrantControlServicePermission
-{
-    $currentPerms = Get-ServicePermission -Name $serviceName -Identity $user
-    Assert-Null $currentPerms "User '$user' already has permissions on '$serviceName'."
-    
-    Grant-ServiceControlPermission -ServiceName $serviceName -Identity $user
-    Assert-LastProcessSucceeded
-    
-    $expectedAccessRights = [Carbon.Security.ServiceAccessRights]::QueryStatus -bor `
-                            [Carbon.Security.ServiceAccessRights]::EnumerateDependents -bor `
-                            [Carbon.Security.ServiceAccessRights]::Start -bor `
-                            [Carbon.Security.ServiceAccessRights]::Stop
-    $currentPerms = Get-ServicePermission -Name $serviceName -Identity $user
-    Assert-NotNull $currentPerms
-    Assert-Equal $expectedAccessRights $currentPerms.ServiceAccessRights
-}
+        Revoke-CServicePermission -Name $serviceName -PrincipalName $groupName
+        $perms = Get-CServicePermission -Name $serviceName -PrincipalName $groupName
+        $perms | Should -BeNullOrEmpty
+    }
 
-function Test-ShouldSupportWhatIf
-{
-    $currentPerms = Get-ServicePermission -Name $serviceName -Identity $user
-    Assert-Null $currentPerms
-    
-    Grant-ServiceControlPermission -ServiceName $serviceName -Identity $user -WhatIf
-    
-    $currentPerms = Get-ServicePermission -Name $serviceName -Identity $user
-    Assert-Null $currentPerms
-}
+    It 'should grant control permission' {
+        Grant-CServiceControlPermission -Name $serviceName -PrincipalName $script:groupName
+        ThenPermission -IsControl
+    }
 
+    It 'supports WhatIf' {
+        Grant-CServiceControlPermission -Name $serviceName -PrincipalName $script:groupName -WhatIf
+        ThenPermission -IsNull
+    }
+}
