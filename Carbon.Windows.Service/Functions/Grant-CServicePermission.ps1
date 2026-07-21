@@ -3,12 +3,35 @@ function Grant-CServicePermission
 {
     <#
     .SYNOPSIS
-    Grants permissions for an identity against a service.
+    Grants permissions to a service.
 
     .DESCRIPTION
-    By default, only Administators are allowed to manage a service.  Use this function to grant specific identities permissions to manage a specific service.
+    The `Grant-CServicePermission` function grants permissions to a service. Pass the service's name to the `Name`
+    parameter, the principal's name to the `PrincipalName` parameter, and the permissions to grant to the `Permission`
+    parameter. Valid permissions are:
 
-    If you just want to grant a user the ability to start/stop/restart a service using PowerShell's `Start-Service`, `Stop-Service`, or `Restart-Service` cmdlets, use the `Grant-ServiceControlPermissions` function instead.
+    * QueryConfig
+    * ChangeConfig
+    * QueryStatus
+    * EnumerateDependents
+    * Start
+    * Stop
+    * PauseContinue
+    * Interrogate
+    * UserDefinedControl
+    * Delete
+    * ReadControl
+    * WriteDac
+    * WriteOwner
+    * FullControl
+
+    To grant multiple permissions, use a flags enum string, e.g. `'QueryConfig, QueryStatus, EnumerateDependents'`.
+
+    By default, only Administators are allowed to manage a service.  Use this function to grant other principals
+    permissions to manage a service.
+
+    If you just want to grant a user the ability to start/stop/restart a service using PowerShell's `Start-Service`,
+    `Stop-Service`, or `Restart-Service` cmdlets, use the `Grant-ServiceControlPermission` function instead.
 
     Any previous permissions are replaced.
 
@@ -16,101 +39,52 @@ function Grant-CServicePermission
     Get-CServicePermission
 
     .LINK
-    Grant-ServiceControlPermissions
+    Grant-ServiceControlPermission
 
     .EXAMPLE
-    Grant-CServicePermission -Identity FALCON\Chewbacca -Name Hyperdrive -QueryStatus -EnumerateDependents -Start -Stop
+    Grant-CServicePermission -Identity FALCON\Chewbacca -Name Hyperdrive 'QueryStatus, EnumerateDependents, Start, Stop'
 
-    Grants Chewbacca the permissions to query, enumerate dependents, start, and stop the `Hyperdrive` service.  Coincedentally, these are the permissions that Chewbacca nees to run `Start-Service`, `Stop-Service`, `Restart-Service`, and `Get-Service` cmdlets against the `Hyperdrive` service.
+    Grants Chewbacca the permissions to query, enumerate dependents, start, and stop the `Hyperdrive` service.
+    Coincedentally, these are the permissions that Chewbacca nees to run `Start-Service`, `Stop-Service`,
+    `Restart-Service`, and `Get-Service` cmdlets against the `Hyperdrive` service.
     #>
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
+    [Diagnostics.CodeAnalysis.SuppressMessage('PSShouldProcess', '')]
     param(
-        [Parameter(Mandatory=$true)]
-        [string]
         # The name of the service to grant permissions to.
-        $Name,
+        [Parameter(Mandatory)]
+        [String] $Name,
 
-        [Parameter(Mandatory=$true)]
-        [string]
-        # The identity to grant permissions for.
-        $Identity,
+        # The principal to grant permissions to.
+        [Parameter(Mandatory)]
+        [String] $PrincipalName,
 
-        [Parameter(Mandatory=$true,ParameterSetName='FullControl')]
-        [Switch]
-        # Grant full control on the service
-        $FullControl,
-
-        [Parameter(ParameterSetName='PartialControl')]
-        [Switch]
-        # Grants permission to query the service's configuration.
-        $QueryConfig,
-
-        [Parameter(ParameterSetName='PartialControl')]
-        [Switch]
-        # Grants permission to change the service's permission.
-        $ChangeConfig,
-
-        [Parameter(ParameterSetName='PartialControl')]
-        [Switch]
-        # Grants permission to query the service's status.
-        $QueryStatus,
-
-        [Parameter(ParameterSetName='PartialControl')]
-        [Switch]
-        # Grants permissionto enumerate the service's dependent services.
-        $EnumerateDependents,
-
-        [Parameter(ParameterSetName='PartialControl')]
-        [Switch]
-        # Grants permission to start the service.
-        $Start,
-
-        [Parameter(ParameterSetName='PartialControl')]
-        [Switch]
-        # Grants permission to stop the service.
-        $Stop,
-
-        [Parameter(ParameterSetName='PartialControl')]
-        [Switch]
-        # Grants permission to pause/continue the service.
-        $PauseContinue,
-
-        [Parameter(ParameterSetName='PartialControl')]
-        [Switch]
-        # Grants permission to interrogate the service (i.e. ask it to report its status immediately).
-        $Interrogate,
-
-        [Parameter(ParameterSetName='PartialControl')]
-        [Switch]
-        # Grants permission to run the service's user-defined control.
-        $UserDefinedControl,
-
-        [Parameter(ParameterSetName='PartialControl')]
-        [Switch]
-        # Grants permission to delete the service.
-        $Delete,
-
-        [Parameter(ParameterSetName='PartialControl')]
-        [Switch]
-        # Grants permission to query the service's security descriptor.
-        $ReadControl,
-
-        [Parameter(ParameterSetName='PartialControl')]
-        [Switch]
-        # Grants permission to set the service's discretionary access list.
-        $WriteDac,
-
-        [Parameter(ParameterSetName='PartialControl')]
-        [Switch]
-        # Grants permission to modify the group and owner of a service.
-        $WriteOwner
+        # The permissions to grant. Valid values are:
+        #
+        # * QueryConfig
+        # * ChangeConfig
+        # * QueryStatus
+        # * EnumerateDependents
+        # * Start
+        # * Stop
+        # * PauseContinue
+        # * Interrogate
+        # * UserDefinedControl
+        # * Delete
+        # * ReadControl
+        # * WriteDac
+        # * WriteOwner
+        # * FullControl
+        #
+        # To grant multiple permissions, use a flags enum string, e.g. `'QueryConfig, QueryStatus, EnumerateDependents'`.
+        [Parameter(Mandatory)]
+        [Carbon_Windows_Service_ServiceAccessRights] $Permission
     )
 
     Set-StrictMode -Version 'Latest'
-
     Use-CallerPreference -Cmdlet $PSCmdlet -Session $ExecutionContext.SessionState
 
-    $account = Resolve-CIdentity -Name $Identity -NoWarn
+    $account = Resolve-CPrincipal -Name $PrincipalName
     if( -not $account )
     {
         return
@@ -121,18 +95,21 @@ function Grant-CServicePermission
         return
     }
 
-    $accessRights = [Carbon.Security.ServiceAccessRights]::FullControl
-    if( $pscmdlet.ParameterSetName -eq 'PartialControl' )
+    $perm = Get-CServicePermission -Name $Name -PrincipalName $PrincipalName
+    if ($perm -and $perm.ServiceAccessRights -eq $Permission)
     {
-        $accessRights = 0
-        [Enum]::GetValues( [Carbon.Security.ServiceAccessRights] ) |
-            Where-Object { $PSBoundParameters.ContainsKey( $_ ) } |
-            ForEach-Object { $accessRights = $accessRights -bor [Carbon.Security.ServiceAccessRights]::$_ }
+        $msg = "[Grant-CServicePermission] ""$($account.FullName)"" already has ""${Permission}"" permission to " +
+               """${Name} service."
+        Write-Verbose $msg
+        return
     }
 
-    $dacl = Get-CServiceAcl -Name $Name
-    $dacl.SetAccess( [Security.AccessControl.AccessControlType]::Allow, $account.Sid, $accessRights, 'None', 'None' )
+    $msg = "[Grant-CServicePermission] Granting ""$($account.FullName)"" ""${Permission}"" permission to the " +
+           """${Name}"" service."
+    Write-Information $msg
 
+    $dacl = Get-CServiceAcl -Name $Name
+    $dacl.SetAccess( [Security.AccessControl.AccessControlType]::Allow, $account.Sid, $Permission, 'None', 'None' )
     Set-CServiceAcl -Name $Name -DACL $dacl
 }
 

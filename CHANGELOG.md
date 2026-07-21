@@ -53,6 +53,12 @@ If switching from Carbon,
   * Removed `Password` parameter. Use `Credential` parameter instead.
   * Rename usages of `Dependencies` to `Dependency` parameter. The `Dependencies` alias removed.
 * Replace usage of `Remove-Service` alias with `Uninstall-CService` function.
+* `Grant-CServicePermission`:
+  * Rename usages of the `Identity` parameter to `PrincipalName`.
+  * Condense individual permission switches into a flags enum string passed to new `Permission` parameter. For example,
+    `Grant-CServicePermission -Name $svcName -PrincipalName $user -QueryConfig -EnumerateDependents` would be changed
+    to `Grant-CServicePermission -Name $svcName -PrincipalName $user 'QueryConfig, EnumerateDependents'`.
+* Rename usages of the `Revoke-CServicePermission` function's `Identity` parameter to `PrincipalName`.
 
 ### Added
 
@@ -76,6 +82,13 @@ If switching from Carbon,
     * [`LaunchProtected`](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_launch_protected_info)
 * `Get-CServiceSecurityDescriptor` sets `Owner` and `Group` on the returned security descriptor object.
 * `Uninstall-CService` writes an information message when uninstalling a service.
+* `Grant-CServicePermission`:
+  * writes an information message when granting permissions.
+  * `WhatIf` support.
+* `Revoke-CServicePermission`:
+  * `WhatIf` support.
+  * writes an information message when revoking permission.
+
 
 ### Changed
 
@@ -97,6 +110,12 @@ The following changed from Carbon:
   * `Command` parameter renamed to `FailureCommand`.
   * Removed `Password` parameter. Use `Credential` parameter instead.
   * `Dependencies` alias on `Dependency` parameter. Updates usages.
+* `Grant-CServicePermission`:
+  * replaced individual permission switches (e.g. `-QueryConfig -EnumerateDependents`) and replaced with `Permission`
+    parameter. Pass a flags enum string to `Permission`, e.g. `-QueryConfig -EnumerateDependents` would get passed to
+    `Permission` as `'QueryConfig, EnumerateDependents'`.
+  * only sets permissions if they are different than existing permissions
+* Renamed the `Revoke-CServicePermission` function's `Identity` parameter to `PrincipalName`.
 
 ### Fixed
 

@@ -3,10 +3,12 @@ function Revoke-CServicePermission
 {
     <#
     .SYNOPSIS
-    Removes all permissions an identity has to manage a service.
+    Removes permissions to a service.
 
     .DESCRIPTION
-    No permissions are left behind.  This is an all or nothing operation, baby!
+    The `Revoke-CServicePermission` function removes a principal's permissions to a Windows service. Pass the service's
+    name to the `Name` parameter, and the principal's name whose permissions to remove to the `PrincipalName` parameter.
+    If the user has permissions, they are removed. If the user has no permissions, nothing happens.
 
     .LINK
     Get-CServicePermission
@@ -15,28 +17,26 @@ function Revoke-CServicePermission
     Grant-CServicePermission
 
     .EXAMPLE
-    Revoke-CServicePermission -Name 'Hyperdrive` -Identity 'CLOUDCITY\LCalrissian'
+    Revoke-CServicePermission -Name 'Hyperdrive` -PrincipalName 'CLOUDCITY\LCalrissian'
 
     Removes all of Lando's permissions to control the `Hyperdrive` service.
     #>
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
+    [Diagnostics.CodeAnalysis.SuppressMessage('PSShouldProcess', '')]
     param(
-        [Parameter(Mandatory=$true)]
-        [string]
         # The service.
-        $Name,
+        [Parameter(Mandatory)]
+        [String] $Name,
 
-        [Parameter(Mandatory=$true)]
-        [string]
-        # The identity whose permissions are being revoked.
-        $Identity
+        # The principal whose permissions to remove.
+        [Parameter(Mandatory)]
+        [String] $PrincipalName
     )
 
     Set-StrictMode -Version 'Latest'
-
     Use-CallerPreference -Cmdlet $PSCmdlet -Session $ExecutionContext.SessionState
 
-    $account = Resolve-CIdentity -Name $Identity -NoWarn
+    $account = Resolve-CPrincipal -Name $PrincipalName
     if( -not $account )
     {
         return
@@ -47,13 +47,14 @@ function Revoke-CServicePermission
         return
     }
 
-    if( (Get-CServicePermission -Name $Name -Identity $account.FullName) )
+    if( (Get-CServicePermission -Name $Name -PrincipalName $account.FullName) )
     {
-        Write-Verbose ("Revoking {0}'s {1} service permissions." -f $account.FullName,$Name)
+        $msg = "[Revoke-CServicePermission] Removing ""$($account.FullName)"" principal's permissions to the " +
+               """${Name}"" service."
+        Write-Information $msg
 
         $dacl = Get-CServiceAcl -Name $Name
         $dacl.Purge( $account.Sid )
-
         Set-CServiceAcl -Name $Name -Dacl $dacl
     }
  }
