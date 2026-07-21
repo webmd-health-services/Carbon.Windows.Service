@@ -3,45 +3,49 @@ function Grant-CServiceControlPermission
 {
     <#
     .SYNOPSIS
-    Grants a user/group permission to start/stop (i.e. use PowerShell's `*-Service` cmdlets) a service.
+    Grants permission to control a Windows service.
 
     .DESCRIPTION
-    By default, only Administrators are allowed to control a service. You may notice that when running the `Stop-Service`, `Start-Service`, or `Restart-Service` cmdlets as a non-Administrator, you get permissions errors. That's because you need to correct permissions.  This function grants just the permissions needed to use PowerShell's `Stop-Service`, `Start-Service`, and `Restart-Service` cmdlets to control a service.
+    The `Grant-CServiceControlPermission` grants a principal the permission to control a Windows service (i.e. to use
+    PowerShell's service cmdlets to query, start, and stop the service). Pass the service name to the `Name` parameter
+    and the principal's name to the `PrincipalName` parameter. The user is granted permission to control the service,
+    replacing any existing permissions the principal has.
+
+    By default, only Administrators are allowed to control a service. You may notice that when running the
+    `Stop-Service`, `Start-Service`, or `Restart-Service` cmdlets as a non-Administrator, you get permissions errors.
+    That's because you need to correct permissions.  This function grants just the permissions needed to use
+    PowerShell's `Stop-Service`, `Start-Service`, and `Restart-Service` cmdlets to control a service.
 
     .LINK
     Get-CServicePermission
-    
+
     .LINK
     Grant-CServicePermission
-    
+
     .LINK
     Revoke-CServicePermission
-    
+
     .EXAMPLE
-    Grant-CServiceControlPermission -ServiceName CCService -Identity INITRODE\Builders
+    Grant-CServiceControlPermission -ServiceName 'TPSReport' -PrincipalName 'INITRODE\Builders'
 
-    Grants the INITRODE\Builders group permission to control the CruiseControl.NET service.
+    Grants the INITRODE\Builders group permission to control the TPSReport service.
     #>
-    [CmdletBinding(SupportsShouldProcess=$true)]
+    [CmdletBinding(SupportsShouldProcess)]
+    [Diagnostics.CodeAnalysis.SuppressMessage('PSShouldProcess', '')]
     param(
-        [Parameter(Mandatory=$true)]
-        [string]
         # The name of the service.
-        $ServiceName,
-        
-        [Parameter(Mandatory=$true)]
-        [string]
-        # The user/group name being given access.
-        $Identity
-    )
-   
-    Set-StrictMode -Version 'Latest'
+        [Parameter(Mandatory)]
+        [String] $Name,
 
+        # The user/group name being given access.
+        [Parameter(Mandatory)]
+        [String] $PrincipalName
+    )
+
+    Set-StrictMode -Version 'Latest'
     Use-CallerPreference -Cmdlet $PSCmdlet -Session $ExecutionContext.SessionState
 
-    if( $pscmdlet.ShouldProcess( $ServiceName, "grant control service permissions to '$Identity'" ) )
-    {
-        Grant-CServicePermission -Name $ServiceName -Identity $Identity -QueryStatus -EnumerateDependents -Start -Stop
-    }
+    Grant-CServicePermission -Name $Name `
+                             -PrincipalName $PrincipalName `
+                             -Permission 'QueryStatus, EnumerateDependents, Start, Stop'
 }
-
