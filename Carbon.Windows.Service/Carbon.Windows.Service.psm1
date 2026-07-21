@@ -38,6 +38,7 @@ Import-Module -Name (Join-Path -Path $modulesDirPath -ChildPath 'PureInvoke\Pure
                     'Invoke-AdvApiQueryServiceConfig',
                     'Invoke-AdvApiQueryServiceConfig2',
                     'Invoke-AdvApiQueryServiceObjectSecurity',
+                    'Invoke-AdvApiSetServiceObjectSecurity',
                     'Write-Win32Error'
                 ) `
               -Verbose:$false
