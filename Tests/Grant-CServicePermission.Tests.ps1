@@ -1,59 +1,100 @@
+
+using module ..\Carbon.Windows.Service
+
 #Requires -Version 5.1
+#Requires -RunAsAdministrator
 Set-StrictMode -Version 'Latest'
 
 BeforeAll {
     Set-StrictMode -Version 'Latest'
 
-    & (Join-Path -Path $PSScriptRoot -ChildPath 'Initialize-CarbonTest.ps1' -Resolve)
+    $cwsDirPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Carbon.Windows.Service' -Resolve
+    Import-Module -Name $cwsDirPath -Verbose:$false
+    Import-Module -Name (Join-Path -Path $cwsDirPath -ChildPath 'M\Carbon.Accounts' -Resolve) `
+                  -Function @('Install-CLocalGroup', 'Uninstall-CLocalGroup') `
+                  -Prefix 'T' `
+                  -Verbose:$false
+
+    $script:groupName = 'Everyone'
+    if ((Get-Command -Name 'Get-LocalGroup' -CommandType Cmdlet -ErrorAction Ignore))
+    {
+        $script:groupName = 'CarbonGrntSvcP'
+        Install-TCLocalGroup -Name $script:groupName -Description 'Carbon Grant-CServicePermission'
+    }
+
+    function ThenPermission
+    {
+        param(
+            [Parameter(Mandatory, ParameterSetName='Is')]
+            [AllowNull()]
+            [Carbon_Windows_Service_ServiceAccessRights] $Is,
+
+            [Parameter(Mandatory, ParameterSetName='IsNull')]
+            [switch] $IsNull
+        )
+
+        $perm = Get-CServicePermission -Name $serviceName -PrincipalName $script:groupName
+
+        if ($Is)
+        {
+            $perm | Should -Not -BeNullOrEmpty
+            $perm.ServiceAccessRights | Should -Be $Is
+        }
+        else
+        {
+            $perm | Should -BeNullOrEmpty
+        }
+    }
 }
 
-Describe 'Grant-ServicePermission' {
+AfterAll {
+    if ($script:groupName -ne 'Everyone')
+    {
+        Uninstall-TCLocalGroup -Name $script:groupName
+    }
+}
 
+Describe 'Grant-CServicePermission' {
     BeforeEach {
-        $username = 'CarbonGrantSrvcPerms'
-        $password = 'a1b2c3d4#'
-        $cred = [pscredential]::New($username, (ConvertTo-SecureString $password -AsPlainText -Force))
-        Install-CUser -Credential $cred -Description 'Account for testing Carbon Grant-ServicePermission functions.'
-
         $serviceName = 'CarbonGrantServicePermission'
-        $servicePath = Join-Path $PSScriptRoot Service\NoOpService.exe -Resolve
+        $servicePath = Join-Path -Path $PSScriptRoot -ChildPath 'NoOpService.exe' -Resolve
         Install-CService -Name $serviceName -Path $servicePath -StartupType Disabled
 
-        Revoke-CServicePermission -Name $serviceName -Identity $username
-        $perms = Get-CServicePermission -Name $serviceName -Identity $username
+        Revoke-CServicePermission -Name $serviceName -PrincipalName $groupName
+        $perms = Get-CServicePermission -Name $serviceName -PrincipalName $groupName
         $perms | Should -BeNullOrEmpty
     }
 
-    It 'should grant full control' {
-
-        Grant-CServicePermission -Name $serviceName -Identity $username -FullControl
-        $perm = Get-CServicePermission -Name $serviceName -Identity $username
-        $perm | Should -Not -BeNullOrEmpty
-        $perm.ServiceAccessRights | Should -Be ([Carbon.Security.ServiceAccessRights]::FullControl)
+    $perms = [Enum]::GetValues( [Carbon_Windows_Service_ServiceAccessRights] )
+    It 'should grant <_> permission' -ForEach $perms {
+        Grant-CServicePermission -Name $serviceName -PrincipalName $script:groupName -Permission $_
+        ThenPermission -Is $_
     }
 
-    It 'should grant individual permissions' {
-        [Enum]::GetValues( [Carbon.Security.ServiceAccessRights] ) |
-            ForEach-Object {
-                $grantArgs = @{
-                    $_ = $true;
-                }
-                Grant-CServicePermission -Name $serviceName -Identity $username @grantArgs
-                $perm = Get-CServicePermission -Name $serviceName -Identity $username
-                $perm | Should -Not -BeNullOrEmpty
-                $perm.ServiceAccessRights | Should -Be ([Carbon.Security.ServiceAccessRights]::$_)
-            }
+    It 'replaces permissions' {
+        Grant-CServicePermission -Name $serviceName -PrincipalName $script:groupName -Permission EnumerateDependents
+        ThenPermission -Is EnumerateDependents
+        Grant-CServicePermission -Name $serviceName -PrincipalName $script:groupName -Permission QueryConfig
+        ThenPermission -Is QueryConfig
     }
 
-    It 'should grant all permissions' {
-        $grantArgs = @{ }
-        [Enum]::GetValues( [Carbon.Security.ServiceAccessRights] ) |
-            Where-Object { $_ -ne 'FullControl' } |
-            ForEach-Object { $grantArgs.$_ = $true }
+    It 'is idempotent' {
+        Grant-CServicePermission -Name $serviceName -PrincipalName $script:groupName -Permission QueryConfig
+        ThenPermission -Is QueryConfig
+        Mock -CommandName 'Set-CServiceAcl' -ModuleName 'Carbon.Windows.Service'
+        Grant-CServicePermission -Name $serviceName -PrincipalName $script:groupName -Permission QueryConfig
+        Should -Not -Invoke 'Set-CServiceAcl' -ModuleName 'Carbon.Windows.Service'
+    }
 
-        Grant-CServicePermission -Name $serviceName -Identity $username @grantArgs
-        $perm = Get-CServicePermission -Name $serviceName -Identity $username
-        $perm | Should -Not -BeNullOrEmpty
-        $perm.ServiceAccessRights | Should -Be ([Carbon.Security.ServiceAccessRights]::FullControl)
+    It 'supports flags enum string' {
+        Grant-CServicePermission -Name $serviceName `
+                                 -PrincipalName $script:groupName `
+                                 -Permission 'QueryConfig, EnumerateDependents'
+        ThenPermission -Is 'QueryConfig, EnumerateDependents'
+    }
+
+    It 'supports WhatIf' {
+        Grant-CServicePermission -Name $serviceName -PrincipalName $script:groupName -Permission QueryConfig -WhatIf
+        ThenPermission -IsNull
     }
 }
