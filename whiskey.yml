@@ -1,8 +1,5 @@
 
 Build:
-- PowerShell: prism install | Format-Table -Auto
-  .ExceptDuring: Clean
-
 - Version:
     Path: Carbon.Windows.Service\Carbon.Windows.Service.psd1
     Prerelease:
@@ -14,10 +11,13 @@ Build:
 - Exec: appveyor UpdateBuild -Version "$(WHISKEY_SEMVER2)+$(WHISKEY_BUILD_NUMBER)"
   .OnlyBy: BuildServer
 
-# powershell.exe and pwsh.exe handle arguments passed to sc.exe different. This tool helps us figure out how the args
-# are handled.
 - PowerShell: |
-    New-Item -Path '.\Carbon.Windows.Service\bin' -ItemType 'Directory' -ErrorAction Ignore
+    prism install -Path .\Carbon.Windows.Service | Format-Table
+
+    New-Item -Path '.\Carbon.Windows.Service\bin' -ItemType 'Directory' -ErrorAction Ignore | Format-Table
+
+    # powershell.exe and pwsh.exe handle arguments passed to sc.exe differently. This tool helps us detect how args are
+    # passed.
     $typeDef = @'
         using System;
 
@@ -39,17 +39,17 @@ Build:
 - MergeFile:
     .OnlyBy: BuildServer
     # Builds run twice on some serves. Only run this step if the module hasn't been merged yet.
-    IfExists: Carbon.Windows.Service\Functions\*.ps1
+    .IfExists: Carbon.Windows.Service\Functions\*.ps1
     Path:
     - Carbon.Windows.Service\Functions\*.ps1
     DestinationPath: Carbon.Windows.Service\Carbon.Windows.Service.psm1
     DeleteSourceFiles: true
     TextSeparator: "$(NewLine)$(NewLine)"
 
-- PowerShell: init.ps1
+- PowerShell: .\init.ps1
   .ExceptDuring: Clean
 
-- PowerShell: reset.ps1
+- PowerShell: .\reset.ps1
   .OnlyDuring: Clean
 
 - CopyFile:
@@ -77,16 +77,16 @@ Build:
 - Exec: appveyor PushArtifact '$(WHISKEY_OUTPUT_DIRECTORY)\Carbon.Windows.Service.$(WHISKEY_SEMVER2_NO_BUILD_METADATA).nupkg' -DeploymentName 'PowerShellGallery'
   .OnlyBy: BuildServer
 
+Test:
+- PowerShell: prism install | Format-Table
 - Pester:
     Configuration:
         Run:
             Path: Tests\*.Tests.ps1
             Exit: true
-            Throw: true
         TestResult:
             Enabled: true
             OutputPath: .output\pester.xml
             TestSuiteName: Carbon.Windows.Service
         Output:
             Verbosity: Detailed
-
