@@ -76,6 +76,19 @@
 
     # Functions to export from this module. Only list public function here.
     FunctionsToExport = @(
+        'Assert-CService',
+        'Get-CServiceAcl',
+        'Get-CServiceConfiguration',
+        'Get-CServicePermission',
+        'Get-CServiceSecurityDescriptor',
+        'Grant-CServiceControlPermission',
+        'Grant-CServicePermission',
+        'Install-CService',
+        'Restart-CRemoteService',
+        'Revoke-CServicePermission',
+        'Set-CServiceAcl',
+        'Test-CService',
+        'Uninstall-CService'
     )
 
     # Cmdlets to export from this module. By default, you get a script module, so there are no cmdlets.
