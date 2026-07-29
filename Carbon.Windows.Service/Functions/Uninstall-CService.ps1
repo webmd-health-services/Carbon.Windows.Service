@@ -3,15 +3,15 @@ function Uninstall-CService
 {
     <#
     .SYNOPSIS
-    Removes/deletes a service.
+    Removes/deletes a Windows service.
 
     .DESCRIPTION
-    Removes an existing Windows service.  If the service doesn't exist, nothing happens.  The service is stopped before being deleted, so that the computer doesn't need to be restarted for the removal to complete.
-
-    Beginning in Carbon 2.7, if the service's process is still running after the service is stopped (some services don't behave nicely) and the service is only running one process, `Uninstall-CService` will kill the service's process. This helps prevent requiring a reboot. If you want to give the service time to
-
-    .LINK
-    Carbon_Service
+    The `Uninstall-CService` function removes an existing Windows service.  If the service doesn't exist, nothing
+    happens. The service is stopped before being deleted, so that the computer doesn't need to be restarted for the
+    removal to complete. If the service's process is still running after the service is stopped (some services don't
+    behave nicely) and the service is only running one process, `Uninstall-CService` will kill the service's process.
+    This helps prevent requiring a reboot. Use the `StopTimeout` parameter to give the service time to stop before
+    killing its process. The default is to kill the process immediately after `Stop-Process` returns.
 
     .LINK
     Install-CService
@@ -19,27 +19,23 @@ function Uninstall-CService
     .EXAMPLE
     Uninstall-CService -Name DeathStar
 
-    Removes the Death Star Windows service.  It is destro..., er, stopped first, then destro..., er, deleted.  If only the rebels weren't using Linux!
+    Removes the Death Star Windows service.  It is destro..., er, stopped first, then destro..., er, deleted.  If only
+    the rebels weren't using Linux!
     #>
-    [CmdletBinding(SupportsShouldProcess=$true)]
+    [CmdletBinding(SupportsShouldProcess)]
     param(
-        [Parameter(Mandatory=$true)]
-        [string]
         # The service name to delete.
-        $Name,
+        [Parameter(Mandatory)]
+        [String] $Name,
 
-        [timespan]
         # The amount of time to wait for the service to stop before attempting to kill it. The default is not to wait.
-        #
-        # This parameter was added in Carbon 2.7.
-        $StopTimeout
+        [TimeSpan] $StopTimeout
     )
 
     Set-StrictMode -Version 'Latest'
     Use-CallerPreference -Cmdlet $PSCmdlet -Session $ExecutionContext.SessionState
 
     $service = Get-Service -ErrorAction Ignore | Where-Object 'Name' -EQ $Name
-    $sc = Join-Path -Path $env:WinDir -ChildPath 'system32\sc.exe' -Resolve
 
     if( -not $service )
     {
@@ -62,6 +58,13 @@ function Uninstall-CService
     {
         return
     }
+
+    $nameMsg = """$($service.DisplayName)"" (${Name})"
+    if ($service.DisplayName -eq $Name)
+    {
+        $nameMsg = """${Name}"""
+    }
+    Write-Information "Uninstalling ${nameMsg} service."
 
     Stop-Service $Name
     if( $cimService -and $cimServiceProcessCount -eq 1 )
@@ -100,7 +103,7 @@ function Uninstall-CService
         }
     }
 
-
+    $sc = Join-Path -Path ([Environment]::GetFolderPath('System')) -ChildPath 'sc.exe' -Resolve
     Write-Verbose -Message ('[Uninstall-CService]  [{0}]  {1} delete {0}' -f $Name,$sc)
     $output = & $sc delete $Name
     if( $LASTEXITCODE )
@@ -119,6 +122,3 @@ function Uninstall-CService
         $output | Write-Verbose
     }
 }
-
-Set-Alias -Name 'Remove-Service' -Value 'Uninstall-CService'
-
