@@ -1,6 +1,10 @@
 
 # Carbon.Windows.Service Changelog
 
+## 1.0.1
+
+Fixed: `Install-CService` fails with "Unable to find type \[ServiceStartMode\]." error.
+
 ## 1.0.0
 
 ### Upgrade Instructions
