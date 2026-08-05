@@ -91,7 +91,7 @@ function Install-CService
         # The startup type: automatic, manual, or disabled.  Default is automatic.
         #
         # To start the service as automatic delayed, use the `-Delayed` switch and set this parameter to `Automatic`.
-        [ServiceStartMode] $StartupType = [ServiceStartMode]::Automatic,
+        [ServiceProcess.ServiceStartMode] $StartupType = [ServiceProcess.ServiceStartMode]::Automatic,
 
         # When the startup type is automatic, further configure the service start type to be automatic delayed. This
         # parameter is ignored unless `StartupType` is `Automatic`.
