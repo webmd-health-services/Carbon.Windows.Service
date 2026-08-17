@@ -181,37 +181,20 @@ function Get-CServiceConfiguration
                 $config['FailureActionsOnNonCrashFailures'] = $winSvcCfg.FailureActionsOnNonCrashFailures
             }
 
-            $config['PreferredNode'] = $null
-            if ($null -eq $script:numaEnabled -or $true -eq $script:numaEnabled)
+            # We haven't found out of NUMA is enabled on this computer yet.
+            if ($null -eq $script:numaEnabled)
             {
-                # If NUMA isn't enabled, querying PreferredNode results in a "The parameter is incorrect." (87) error.
-                # This is the only way I've found to reliably detect if NUMA is enabled.
-                $preferredNodeErrors = @()
-                $winSvcCfg = Invoke-AdvApiQueryServiceConfig2 -ServiceHandle $svcHandle `
-                                                              -InfoLevel PreferredNode `
-                                                              -ErrorAction SilentlyContinue `
-                                                              -ErrorVariable 'preferredNodeErrors'
-                if ($winSvcCfg)
-                {
-                    $script:numaEnabled = $true
-                    $config['PreferredNode'] = $winSvcCfg.PreferredNode
-                }
-                else
-                {
-                    $parameterIncorrect = 87
-                    $paramIncorrectEx =
-                        $preferredNodeErrors |
-                        Select-Object -ExpandProperty 'Exception' -ErrorAction Ignore |
-                        Where-Object 'NativeErrorCode' -EQ $parameterIncorrect -ErrorAction Ignore
-                    if ($paramIncorrectEx)
-                    {
-                        $script:numaEnabled = $false
-                        for ($idx = 0 ; $idx -lt $preferredNodeErrors.Count ; $idx++)
-                        {
-                            $Global:Error.RemoveAt(0)
-                        }
-                    }
-                }
+                # Per https://learn.microsoft.com/en-us/windows/win32/memory/allocating-memory-from-a-numa-node,
+                # GetNumaHighestNodeNumber is the way to determine if NUMA is enabled or not.
+                $script:numaEnabled = Invoke-KernelGetNumaHighestNodeNumber
+            }
+
+            $config['PreferredNode'] = $null
+            # If NUMA isn't enabled, querying PreferredNode results in a "The parameter is incorrect." (87) error.
+            if ($script:numaEnabled)
+            {
+                $config['PreferredNode'] =
+                    Invoke-AdvApiQueryServiceConfig2 -ServiceHandle $svcHandle -InfoLevel PreferredNode
             }
 
             $winSvcCfg = Invoke-AdvApiQueryServiceConfig2 -ServiceHandle $svcHandle -InfoLevel Preshutdown

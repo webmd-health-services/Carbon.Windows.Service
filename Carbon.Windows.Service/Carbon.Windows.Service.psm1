@@ -25,9 +25,9 @@ Set-StrictMode -Version 'Latest'
 $script:moduleDirPath = $PSScriptRoot
 
 # Three states:
-# * `$null`: never checked if NUMA is enabled by calling `QueryServiceConfig2` for preferred node configuration.
-# * `$true`: NUMA is enabled because calling `QueryServiceConfig2` for preferred node configuration returned a value.
-# * `$false`: NUMA is not enabled because calling `QueryServiceConfig2` for preferred node configuration resulted in a
+# * `$null`: never checked if NUMA is enabled by calling `GetNumaHighestNodeNumber` for preferred node configuration.
+# * `$true`: NUMA is enabled because calling `GetNumaHighestNodeNumber` returned a non-zero value.
+# * `$false`: NUMA is not enabled because calling `QueryServiceConfig2` returned a zero value.
 #   `The parameter is incorrect.` (87) error.
 $script:numaEnabled = $null
 
@@ -44,6 +44,7 @@ Import-Module -Name (Join-Path -Path $modulesDirPath -ChildPath 'PureInvoke\Pure
                     'Invoke-AdvApiQueryServiceConfig2',
                     'Invoke-AdvApiQueryServiceObjectSecurity',
                     'Invoke-AdvApiSetServiceObjectSecurity',
+                    'Invoke-KernelGetNumaHighestNodeNumber',
                     'Write-Win32Error'
                 ) `
               -Verbose:$false

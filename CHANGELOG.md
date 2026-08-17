@@ -3,7 +3,13 @@
 
 ## 1.0.1
 
-Fixed: `Install-CService` fails with "Unable to find type \[ServiceStartMode\]." error.
+### Fixed
+
+* `Install-CService` fails with "Unable to find type \[ServiceStartMode\]." error.
+* Update internal dependency PureInvoke to 2.0.1 (from 2.0.0), which fixes:
+ * `Get-CServiceConfiguration` now correctly uses `GetHighestNumaNodeNumber()` Windows API to determine if NUMA is
+   enabled (PureInvoke fixed an issue where `GetHighestNumaNodeNumber` always returned `1`).
+ * Writes fewer verbose messages
 
 ## 1.0.0
 
