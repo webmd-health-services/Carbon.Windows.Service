@@ -131,7 +131,7 @@ Describe 'Get-CServiceConfiguration' {
     }
 
     It 'should ignore missing service' {
-        $info = Get-CServiceConfiguration -Name 'FUBARsnafu' -ErrorAction Ignore
+        $info = Get-CServiceConfiguration -Name 'Get-CServiceConfigurationIDoNotExistService' -ErrorAction Ignore
         $info | Should -BeNullOrEmpty
         ThenError -IsEmpty
     }
