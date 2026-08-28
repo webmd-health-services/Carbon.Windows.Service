@@ -33,7 +33,6 @@ function Get-CServiceConfiguration
     | `[string] FailureCommand`       | Command for "run command" failure actions. | [`SERVICE_FAILURE_ACTIONSW.lpCommand`](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_failure_actionsw) |
     | `[Object[]] FailureActions`     | Failure actions.                   | [`SC_ACTION`](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-sc_action) |
     | `[bool] FailureActionsOnNonCrashFailures` | Shutdown error handling. | [`SERVICE_FAILURE_ACTIONS_FLAG.fFailureActionsOnNonCrashFailures`](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_failure_actions_flag) |
-    | `[ushort] PreferredNode`        | Preferred NUMA node.               | [`SERVICE_PREFERRED_NODE_INFO.usPreferredNode`](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_preferred_node_info) |
     | `[TimeSpan] PreshutdownTimeout` | Shutdown timeout.                  | [`SERVICE_PRESHUTDOWN_INFO.dwPreshutdownTimeout`](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_preshutdown_info) |
     | `[string[]] RequiredPrivileges` | Required privileges.               | [`pmszRequiredPrivileges`](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_required_privileges_infow) |
     | `[Enum] SidType`                | SID type.                          | [`SERVICE_SID_INFO.dwServiceSidType`](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_sid_info) |
@@ -69,8 +68,14 @@ function Get-CServiceConfiguration
     The user running this function must have `QueryConfig` permissions to the service. Use `Grant-CServicePermission` to
     grant service permissions.
 
+    A service's preferred node configuration is not returned. To get a service' preferred node, use
+    `Get-CServicePreferredNode`.
+
     .LINK
     Grant-CServicePermission
+
+    .LINK
+    Get-CServicePreferredNode
 
     .EXAMPLE
     Get-Service | Get-CServiceConfiguration
@@ -179,22 +184,6 @@ function Get-CServiceConfiguration
             if ($winSvcCfg)
             {
                 $config['FailureActionsOnNonCrashFailures'] = $winSvcCfg.FailureActionsOnNonCrashFailures
-            }
-
-            # We haven't found out of NUMA is enabled on this computer yet.
-            if ($null -eq $script:numaEnabled)
-            {
-                # Per https://learn.microsoft.com/en-us/windows/win32/memory/allocating-memory-from-a-numa-node,
-                # GetNumaHighestNodeNumber is the way to determine if NUMA is enabled or not.
-                $script:numaEnabled = Invoke-KernelGetNumaHighestNodeNumber
-            }
-
-            $config['PreferredNode'] = $null
-            # If NUMA isn't enabled, querying PreferredNode results in a "The parameter is incorrect." (87) error.
-            if ($script:numaEnabled)
-            {
-                $config['PreferredNode'] =
-                    Invoke-AdvApiQueryServiceConfig2 -ServiceHandle $svcHandle -InfoLevel PreferredNode
             }
 
             $winSvcCfg = Invoke-AdvApiQueryServiceConfig2 -ServiceHandle $svcHandle -InfoLevel Preshutdown

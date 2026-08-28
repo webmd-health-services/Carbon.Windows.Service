@@ -27,8 +27,7 @@ $script:moduleDirPath = $PSScriptRoot
 # Three states:
 # * `$null`: never checked if NUMA is enabled by calling `GetNumaHighestNodeNumber` for preferred node configuration.
 # * `$true`: NUMA is enabled because calling `GetNumaHighestNodeNumber` returned a non-zero value.
-# * `$false`: NUMA is not enabled because calling `QueryServiceConfig2` returned a zero value.
-#   `The parameter is incorrect.` (87) error.
+# * `$false`: NUMA is not enabled because calling `GetNumaHighestNodeNumber` returned a zero value.
 $script:numaEnabled = $null
 
 $script:quotesEmptyStringArgs = $null
