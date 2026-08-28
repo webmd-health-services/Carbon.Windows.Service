@@ -1,7 +1,16 @@
 
 # Carbon.Windows.Service Changelog
 
+## 1.1.0
+
+Fixed: `Get-CServiceConfiguration` can write an error on some computers even when NUMA is enabled.
+`Get-CServiceConfiguration` no longer queries or returns preferred node configuration. Created
+`Get-CServicePreferredNode` function to query preferred node configuration, which should only be used on computers that
+are known to have NUMA enabled.
+
 ## 1.0.1
+
+> Released 18 Aug 2026
 
 ### Fixed
 
@@ -12,6 +21,8 @@
  * Writes fewer verbose messages
 
 ## 1.0.0
+
+> Released 29 Jul 2026
 
 ### Upgrade Instructions
 

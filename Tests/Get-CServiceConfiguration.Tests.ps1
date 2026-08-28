@@ -97,10 +97,6 @@ Describe 'Get-CServiceConfiguration' {
             $action.Delay | Should -BeOfType ([TimeSpan])
         }
         $config.FailureActionsOnNonCrashFailures | Should -BeOfType ([bool])
-        if ($null -ne $config.PreferredNode)
-        {
-            $config.PreferredNode | Should -BeOfType ([Int16])
-        }
         $config.PreshutdownTimeout | Should -BeOfType ([TimeSpan])
         ,$config.RequiredPrivileges | Should -BeOfType ([String[]])
         $config.SidType | Should -BeOfType ([Enum])

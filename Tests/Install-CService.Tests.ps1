@@ -347,10 +347,7 @@ BeforeAll {
         }
         else
         {
-            $installErrors |
-                # Ignore any handled "The parameter is incorrect." error when retrieving PreferredNode configuration.
-                Where-Object { $_ -notlike '*PreferredNode*87*' } |
-                Should -BeNullOrEmpty -Because 'Install-CService should be idempotent'
+            $installErrors | Should -BeNullOrEmpty -Because 'Install-CService should be idempotent'
         }
     }
 }
