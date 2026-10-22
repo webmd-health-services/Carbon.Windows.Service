@@ -19,6 +19,10 @@ BeforeAll {
                   -Function @('Test-CNtfsPermission') `
                   -Prefix 'T' `
                   -Verbose:$false
+    Import-Module -Name (Join-Path -Path $psModulesDirPath -ChildPath 'Carbon.Registry' -Resolve) `
+                  -Function @('Get-CRegistryKeyValue', 'Test-CRegistryKeyValue') `
+                  -Prefix 'T' `
+                  -Verbose:$false
     Import-Module -Name (Join-Path -Path $psModulesDirPath -ChildPath 'Carbon.Security' -Resolve) `
                   -Function @('Get-CPrivilege', 'Test-CPrivilege') `
                   -Prefix 'T' `
@@ -133,7 +137,9 @@ BeforeAll {
 
             [TimeSpan] $ResetsFailuresEvery,
 
-            [String] $HasDescription
+            [String] $HasDescription,
+
+            [hashtable] $HasEnvVariable
         )
 
         if (-not $Named)
@@ -279,6 +285,25 @@ BeforeAll {
         {
             $config.FailureCommand | Should -Be $RunsFailureCommand
         }
+
+        $regPath = Join-Path -Path 'HKLM:\SYSTEM\CurrentControlSet\Services' -ChildPath $Named
+        if ($HasEnvVariable -and $HasEnvVariable.Count)
+        {
+            Test-TCRegistryKeyValue -Path $regPath -Name 'Environment' | Should -BeTrue
+            $values = Get-TCRegistryKeyValue -Path $regPath -Name 'Environment'
+            $values | Should -Not -BeNullOrEmpty
+            foreach ($value in $values)
+            {
+                $name,$value = $value.Split('=', 2)
+                $HasEnvVariable.ContainsKey($name) | Should -BeTrue -Because "should have ${name} env variable"
+                $value | Should -Be $HasEnvVariable[$name]
+            }
+            $values | Should -HaveCount $HasEnvVariable.Count
+        }
+        else
+        {
+            Test-TCRegistryKeyValue -Path $regPath -Name 'Environment' | Should -BeFalse
+        }
     }
 
     function WhenInstalling
@@ -404,6 +429,10 @@ Describe 'Install-CService' {
                 FailureRunCommandDelay = '0:00:05.678'
                 OnThirdFailure = 'Reboot'
                 FailureRebootDelay = '0:00:09.012'
+                EnvVariable = @{
+                    'Fubar' = 'Snafu'
+                    'Snafu' = 'Fubar'
+                }
             } -IsIdempotent
             ThenError -IsEmpty
             ThenOutput -IsEmpty
@@ -423,7 +452,11 @@ Describe 'Install-CService' {
                         -HasRunCommandDelay '0:00:05.678' `
                         -OnThirdFailure 'Reboot' `
                         -HasRebootDelay '0:00:09.012' `
-                        -RunAs 'NETWORKSERVICE'
+                        -RunAs 'NETWORKSERVICE' `
+                        -HasEnvVariable @{
+                            'Fubar' = 'Snafu'
+                            'Snafu' = 'Fubar'
+                        }
         }
 
         It 'can install service to run as custom credential' {
@@ -477,7 +510,8 @@ Describe 'Install-CService' {
                         -HasRunCommandDelay '0:00:00' `
                         -OnThirdFailure 'None' `
                         -HasRebootDelay '0:00:00' `
-                        -RunAs 'NETWORKSERVICE'
+                        -RunAs 'NETWORKSERVICE' `
+                        -HasEnvVariable @{}
         }
 
         $dependencies = Get-Service -ErrorAction Ignore | Select-Object -First 2 | Select-Object -ExpandProperty 'Name'
@@ -566,6 +600,11 @@ Describe 'Install-CService' {
                 PropertyName = 'UserName'
                 InstallWith = @{ UserName = 'SYSTEM' }
                 ThenService = @{ RunAs = 'SYSTEM' }
+            },
+            @{
+                PropertyName = 'EnvVariable'
+                InstallWith = @{ EnvVariable = @{ 'Fubar' = 'Snafu2' ; 'Snafu2' = 'Fubar2' } }
+                ThenService = @{ HasEnvVariable = @{ 'Fubar' = 'Snafu2' ; 'Snafu2' = 'Fubar2' } }
             }
         )
 
@@ -610,6 +649,7 @@ Describe 'Install-CService' {
                 OnThirdFailure = 'None'
                 HasRebootDelay = '0:00:00'
                 RunAs = 'NETWORKSERVICE'
+                HasEnvVariable = @{}
             }
             foreach ($thenArgName in $ThenService.Keys)
             {
@@ -796,5 +836,38 @@ Describe 'Install-CService' {
         # No changes, service still returned
         WhenInstalling -WithArgs @{ StartupType = 'Manual' ; PassThru = $true }
         ThenOutput -IsServiceController
+    }
+
+    Context 'Environment' {
+        It 'replaces existing environment' {
+            $expectedEnv = @{ One = 'Two' ; Three = 'Four' }
+            WhenInstalling -WithArgs @{ EnvVariable = $expectedEnv }
+            ThenService -Is Running -HasEnvVariable $expectedEnv
+
+            $expectedEnv = @{ Three = 'Five' ; Six = 'Seven' }
+            WhenInstalling -WithArgs @{ EnvVariable = $expectedEnv }
+            ThenService -Is Running -HasEnvVariable $expectedEnv
+        }
+
+        It 'clears existing environment' {
+            $expectedEnv = @{ Eight = 'Nine' ; Ten = 'Eleven' }
+            WhenInstalling -WithArgs @{ EnvVariable = $expectedEnv }
+            ThenService -Is Running -HasEnvVariable $expectedEnv
+
+            WhenInstalling
+            ThenService -Is Running -HasEnvVariable @{}
+        }
+
+        It 'supports WhatIf' {
+            $expectedEnv = @{ Twelve = 'Thirteen' ; Fourteen = 'Fifteen' }
+            WhenInstalling -WithArgs @{ EnvVariable = $expectedEnv }
+            ThenService -Is Running -HasEnvVariable $expectedEnv
+
+            WhenInstalling -WithArgs @{ EnvVariable = @{ Sixteen = 'Seventeen' } ; WhatIf = $true }
+            ThenService -Is Running -HasEnvVariable $expectedEnv
+
+            WhenInstalling -WithArgs @{ WhatIf = $true }
+            ThenService -Is Running -HasEnvVariable $expectedEnv
+        }
     }
 }

@@ -149,7 +149,10 @@ function Install-CService
         [switch] $PassThru,
 
         # Start the service after install/configuration if it is not running. This parameter was added in Carbon 2.5.0.
-        [switch] $EnsureRunning
+        [switch] $EnsureRunning,
+
+        # Service environment variables.
+        [hashtable] $EnvVariable = @{}
     )
 
     Set-StrictMode -Version 'Latest'
@@ -283,6 +286,10 @@ function Install-CService
         }
     }
 
+    $envRegPath = Join-Path -Path 'HKLM:\SYSTEM\CurrentControlSet\Services' -ChildPath $Name
+    $envRegValueName = 'Environment'
+    $currentEnvVar = @{}
+
     if( $PSCmdlet.ParameterSetName -like 'CustomAccount*' )
     {
         if( $PSCmdlet.ParameterSetName -like '*WithCredential' )
@@ -362,10 +369,10 @@ function Install-CService
         Grant-CNtfsPermission -Identity $identity.FullName -Permission ReadAndExecute -Path $Path
     }
 
-    $doInstall = $doFailureActions = $doDescription = $false
+    $doInstall = $doFailureActions = $doDescription = $doEnv = $false
     if ($Force -or -not (Test-CService -Name $Name))
     {
-        $doInstall = $doFailureActions = $doDescription = $true
+        $doInstall = $doFailureActions = $doDescription = $doEnv = $true
     }
     else
     {
@@ -484,11 +491,32 @@ function Install-CService
             Write-Change 'UserName' -OldValue $currentIdentity.FullName -NewValue $identity.FullName
             $doinstall = $true
         }
+
+        Get-CRegistryKeyValue -Path $envRegPath -Name $envRegValueName |
+            ForEach-Object {
+                if ($null -eq $_)
+                {
+                    return
+                }
+
+                $envVarName,$envVarValue = $_.Split('=', 2)
+                $currentEnvVar[$envVarName] = $envVarValue
+            }
+
+        if ($EnvVariable.Count -ne $currentEnvVar.Count -or `
+            ($EnvVariable.Keys | Where-Object { -not $currentEnvVar.ContainsKey($_) }) -or `
+            ($currentEnvVar.Keys | Where-Object { -not $EnvVariable.ContainsKey($_) }))
+        {
+            Write-Change -Property $envRegValueName `
+                         -OldValue (($currentEnvVar.Keys | Sort-Object) -join ',') `
+                         -NewValue (($EnvVariable.Keys | Sort-Object) -join ',')
+            $doEnv = $true
+        }
     }
 
     try
     {
-        if (-not $doInstall -and -not $doFailureActions -and -not $doDescription)
+        if (-not $doInstall -and -not $doFailureActions -and -not $doDescription -and -not $doEnv)
         {
             Write-Debug -Message ('Skipping {0} service configuration: settings unchanged.' -f $Name)
             return
@@ -650,6 +678,62 @@ function Install-CService
                 $reason = net helpmsg $scExitCode 2>$null | Where-Object { $_ }
                 Write-Error ("Failed to set {0} service's failure actions. {1} returned exit code {2}: {3}" -f $Name,$sc,$scExitCode,$reason)
                 return
+            }
+        }
+
+        if ($doEnv)
+        {
+            $infoMsgs = [Collections.Generic.List[String]]::New()
+            $envVarStrings =
+                $EnvVariable.Keys |
+                Sort-Object |
+                ForEach-Object {
+                    $value = $EnvVariable[$_]
+                    $newValue = "${_}=$($EnvVariable[$_])"
+                    if (-not $currentEnvVar.ContainsKey($_))
+                    {
+                        $infoMsgs.Add("adding   ${_}")
+                    }
+                    elseif( $currentEnvVar[$_] -ne $value)
+                    {
+                        $infoMsgs.Add("updating ${_}")
+                    }
+                    return $newValue
+                }
+            foreach ($currentEnvVarName in $currentEnvVar.Keys)
+            {
+                if ($EnvVariable.ContainsKey($currentEnvVarName))
+                {
+                    continue
+                }
+
+                $infoMsgs.Add("removing ${currentEnvVarName}")
+            }
+
+            $writtenFirstMsg = $false
+            $preamble = "${Name} service environment: "
+            foreach ($msg in $infoMsgs)
+            {
+                $msg = "${preamble}${msg}"
+                if (-not $writtenFirstMsg)
+                {
+                    $writtenFirstMsg = $true
+                    $preamble = "$(' ' * $preamble.Length)"
+                }
+
+                Write-Information $msg
+            }
+
+            if ($null -eq $EnvVariable -or $EnvVariable.Count -eq 0)
+            {
+                Remove-CRegistryKeyValue -Path $envRegPath -Name $envRegValueName -InformationAction SilentlyContinue
+            }
+            else
+            {
+                Set-CRegistryKeyValue -Path $envRegPath `
+                                      -Name $envRegValueName `
+                                      -Strings $envVarStrings `
+                                      -InformationAction SilentlyContinue
             }
         }
     }

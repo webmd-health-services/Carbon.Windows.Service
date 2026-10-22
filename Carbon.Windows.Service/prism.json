@@ -9,12 +9,16 @@
 			"Version": "2.*"
 		},
 		{
-			"Name": "Carbon.Security",
+			"Name": "Carbon.FileSystem",
+			"Version": "2.*"
+		},
+		{
+			"Name": "Carbon.Registry",
 			"Version": "1.*"
 		},
 		{
-			"Name": "Carbon.FileSystem",
-			"Version": "*"
+			"Name": "Carbon.Security",
+			"Version": "1.*"
 		}
 	],
 	"PSModulesDirectoryName": "M"

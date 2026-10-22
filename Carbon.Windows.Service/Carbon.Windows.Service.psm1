@@ -50,11 +50,14 @@ Import-Module -Name (Join-Path -Path $modulesDirPath -ChildPath 'PureInvoke\Pure
 Import-Module -Name (Join-Path -Path $modulesDirPath -ChildPath 'Carbon.Accounts\Carbon.Accounts.psm1' -Resolve) `
               -Function @('Resolve-CPrincipal') `
               -Verbose:$false
-Import-Module -Name (Join-Path -Path $modulesDirPath -ChildPath 'Carbon.Security\Carbon.Security.psm1' -Resolve) `
-              -Function @('Grant-CPrivilege') `
-              -Verbose:$false
 Import-Module -Name (Join-Path -Path $modulesDirPath -ChildPath 'Carbon.FileSystem\Carbon.FileSystem.psm1' -Resolve) `
               -Function @('Grant-CNtfsPermission') `
+              -Verbose:$false
+Import-Module -Name (Join-Path -Path $modulesDirPath -ChildPath 'Carbon.Registry\Carbon.Registry.psm1' -Resolve) `
+              -Function @('Get-CRegistryKeyValue', 'Remove-CRegistryKeyValue', 'Set-CRegistryKeyValue') `
+              -Verbose:$false
+Import-Module -Name (Join-Path -Path $modulesDirPath -ChildPath 'Carbon.Security\Carbon.Security.psm1' -Resolve) `
+              -Function @('Grant-CPrivilege') `
               -Verbose:$false
 
 [Flags()]

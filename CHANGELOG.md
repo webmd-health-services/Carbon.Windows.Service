@@ -1,6 +1,20 @@
 
 # Carbon.Windows.Service Changelog
 
+## 2.0.0
+
+### Upgrade Instructions
+
+`Install-CService` now sets service environment variables, using the `Environment` registry value in a service's
+registry key. If no environment variables are passed to `Install-CService`, any existing environment variables are
+removed from the registry. If you have any services that have environment variables configured in the registry, add
+`-EnvVariable` to usages with the service's current environment variables.
+
+### Added
+
+`Install-CService` now configures a service's environment variables. Pass a hashtable of environment variables to the
+new `EnvVariable` parameter.
+
 ## 1.1.0
 
 Fixed: `Get-CServiceConfiguration` can write an error on some computers even when NUMA is enabled.
