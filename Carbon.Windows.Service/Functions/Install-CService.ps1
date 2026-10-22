@@ -577,13 +577,13 @@ function Install-CService
             if( $service.CanStop )
             {
                 Stop-Service -Name $Name -Force -ErrorAction Ignore
-                if( $? )
+                if ($? -and -not $WhatIfPreference)
                 {
                     $service.WaitForStatus( 'Stopped' )
                 }
             }
 
-            if (-not ($service.Status -eq [ServiceControllerStatus]::Stopped))
+            if (-not ($service.Status -eq [ServiceControllerStatus]::Stopped) -and -not $WhatIfPreference)
             {
                 $msg = "Unable to stop service ""${Name}"" before applying configuration changes. You may need to " +
                        'restart this service manually for any changes to take affect.'

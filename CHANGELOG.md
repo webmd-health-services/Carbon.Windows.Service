@@ -15,6 +15,10 @@ removed from the registry. If you have any services that have environment variab
 `Install-CService` now configures a service's environment variables. Pass a hashtable of environment variables to the
 new `EnvVariable` parameter.
 
+### Fixed
+
+`Install-CService` hangs when using `-WhatIf` and there are configuration changes.
+
 ## 1.1.0
 
 Fixed: `Get-CServiceConfiguration` can write an error on some computers even when NUMA is enabled.
