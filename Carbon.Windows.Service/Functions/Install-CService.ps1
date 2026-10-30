@@ -505,7 +505,8 @@ function Install-CService
 
         if ($EnvVariable.Count -ne $currentEnvVar.Count -or `
             ($EnvVariable.Keys | Where-Object { -not $currentEnvVar.ContainsKey($_) }) -or `
-            ($currentEnvVar.Keys | Where-Object { -not $EnvVariable.ContainsKey($_) }))
+            ($currentEnvVar.Keys | Where-Object { -not $EnvVariable.ContainsKey($_) }) -or `
+            ($EnvVariable.Keys | Where-Object { $currentEnvVar[$_] -ne $EnvVariable[$_] }))
         {
             Write-Change -Property $envRegValueName `
                          -OldValue (($currentEnvVar.Keys | Sort-Object) -join ',') `
