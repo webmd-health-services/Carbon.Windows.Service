@@ -171,6 +171,7 @@ if( -not (Test-Path -Path $whiskeyModuleRoot -PathType Container) )
 }
 
 $ErrorActionPreference = 'Continue'
+
 & {
     $VerbosePreference = 'SilentlyContinue'
     Import-Module -Name $whiskeyModuleRoot -Force
