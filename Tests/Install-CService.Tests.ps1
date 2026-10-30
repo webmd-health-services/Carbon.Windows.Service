@@ -848,7 +848,6 @@ Describe 'Install-CService' {
             WhenInstalling -WithArgs @{ EnvVariable = $expectedEnv }
             ThenService -Is Running -HasEnvVariable $expectedEnv
         }
-
         It 'clears existing environment' {
             $expectedEnv = @{ Eight = 'Nine' ; Ten = 'Eleven' }
             WhenInstalling -WithArgs @{ EnvVariable = $expectedEnv }
@@ -859,7 +858,7 @@ Describe 'Install-CService' {
         }
 
         It 'supports WhatIf' {
-            $expectedEnv = @{ Twelve = 'Thirteen' ; Fourteen = 'Fifteen' }
+            $expectedEnv = @{ Twelve = 'Thirteen' ; Furteen = 'Fifteen' }
             WhenInstalling -WithArgs @{ EnvVariable = $expectedEnv }
             ThenService -Is Running -HasEnvVariable $expectedEnv
 
@@ -867,6 +866,16 @@ Describe 'Install-CService' {
             ThenService -Is Running -HasEnvVariable $expectedEnv
 
             WhenInstalling -WithArgs @{ WhatIf = $true }
+            ThenService -Is Running -HasEnvVariable $expectedEnv
+        }
+
+        It 'replaces environment variable value' {
+            $expectedEnv = @{ Seventeen = 'Eighteen' ; Nineteen = 'Twenty' }
+            WhenInstalling -WithArgs @{ EnvVariable = $expectedEnv }
+            ThenService -Is Running -HasEnvVariable $expectedEnv
+
+            $expectedEnv = @{ Seventeen = 'Eighteen (new)' ; Nineteen = 'Twenty (new)' }
+            WhenInstalling -WithArgs @{ EnvVariable = $expectedEnv }
             ThenService -Is Running -HasEnvVariable $expectedEnv
         }
     }
